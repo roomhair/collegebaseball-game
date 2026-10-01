@@ -694,11 +694,12 @@ const Engine = (() => {
                        lost: (state.scouting && state.scouting.results && state.scouting.results.lost) || [],
                        over: joined.length - take.length };
     state.scouting = null;
+    /* 一般入試で入ってくる部員は選べない。足りない人数ぶんが自動で入部する */
     const n2 = College.need(state);
-    state.newNeed = { bat: n2.bat, pit: n2.pit };
-    state.sets = (n2.bat + n2.pit > 0)
-      ? { kind: 'general', list: College.generalSets(state, n2) }
-      : null;
+    state.newNeed = null;
+    state.sets = null;
+    const general = (n2.bat + n2.pit > 0) ? College.generalSets(state, n2, 1)[0] : [];
+    state.arrivals.general = College.enroll(state, general).map((p) => p.id);
   }
 
   function pickGeneral(state, i) {

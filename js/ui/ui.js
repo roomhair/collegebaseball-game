@@ -135,7 +135,7 @@ const UI = (() => {
   function avg(h, ab) {
     if (!ab) return '.---';
     const v = h / ab;
-    return (v >= 1 ? '1' : '') + v.toFixed(3).replace(/^0/, '');
+    return v >= 1 ? v.toFixed(3) : v.toFixed(3).replace(/^0/, '');
   }
 
   function era(er, outs) {
@@ -200,6 +200,16 @@ const UI = (() => {
     const i = (team.lineup || []).findIndex((s) => s.pid === p.id);
     if (i < 0) return '控え';
     return (i + 1) + '番 ' + posShort(team.lineup[i].pos);
+  }
+
+  /* ---------- 投手の残りスタミナのバー ----------
+     数字（%）は出さず、バーの長さと色と言葉で見せる */
+  function staminaBar(p) {
+    const left = p.pstam == null ? 100 : Math.max(0, Math.min(100, p.pstam));
+    const tier = left >= 85 ? 'ok' : left >= 60 ? 'mid' : 'low';
+    return '<span class="stbar stbar--' + tier + '" title="' + esc(Team.staminaLabel(p)) + '">' +
+      '<i class="stbar__track"><b style="width:' + Math.round(left) + '%"></b></i>' +
+      '<span class="stbar__word">' + esc(Team.staminaLabel(p)) + '</span></span>';
   }
 
   /* ---------- 大学版：人となり・状態 ---------- */
@@ -421,8 +431,7 @@ const UI = (() => {
       abilities += '<div class="stat"><span class="stat__label">最速</span><span class="stat__num stat__num--wide">' + p.velo + ' km/h</span>' + veloInit + '</div>';
       abilities += stat('制球', p.control, null, init.control) + stat('スタミナ', p.stamina, null, init.stamina);
       abilities += '<div class="stat"><span class="stat__label">回復</span>' +
-        '<span class="stat__num stat__num--wide lufat lufat--' + Team.staminaTier(p) + '">' +
-        esc(Team.staminaLabel(p)) + '</span></div>';
+        '<span class="stat__num stat__num--wide">' + staminaBar(p) + '</span></div>';
       abilities += '</div><h4 class="sub">変化球</h4><ul class="pitchlist">' +
         p.pitches.map((q) => {
           const iq = (init.pitches || []).find((x) => x.name === q.name);
@@ -717,8 +726,7 @@ const UI = (() => {
         '</span>' +
         '<span class="lustats">最速<b class="rankval">' + p.velo + '</b>　制' + rankNum(p.control) +
           '　ス' + rankNum(p.stamina) +
-          '　<span class="lufat lufat--' + Team.staminaTier(p) + '">' +
-          esc(Team.staminaLabel(p)) + '</span></span>' +
+          '　' + staminaBar(p) + '</span>' +
         '<span class="luapts lupitch">' + p.pitches.map((q) =>
           '<span class="luball">' + esc(q.name) + '<b>' + q.level + '</b></span>').join('') + '</span>' +
         '<span class="luarrow">' +
@@ -961,6 +969,6 @@ const UI = (() => {
     avg, era, ipText, stat, rankSpan, rankNum, aptSpan, pullText, handMark,
     playerRow, rosterTable, rosterPanel, sortPlayers, playerDetail, openPlayer,
     lineupEditor, roleText, makeSortable, wireRename, captainPicker,
-    careerBatLine, careerPitLine, init, personaBlock, gradeSpan, seasonTable, histList, collegeCells,
+    careerBatLine, careerPitLine, init, staminaBar, personaBlock, gradeSpan, seasonTable, histList, collegeCells,
   };
 })();

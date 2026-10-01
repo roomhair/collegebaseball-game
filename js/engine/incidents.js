@@ -352,8 +352,14 @@ const Incidents = (() => {
       return ev;
     }
     if (kind === 'ob') {
+      const before = Math.round(t.morale || 55);
       t.morale = RNG.clamp((t.morale || 55) + 4, 5, 95);
+      const after = Math.round(t.morale);
       ev.text = 'OB会から差し入れと激励が届いた。部員たちの表情が明るい。';
+      ev.lines = [
+        'チームの雰囲気 ' + Persona.grade5(before) + before + ' → ' + Persona.grade5(after) + after + '（+' + (after - before) + '）',
+        '雰囲気が良いほど、試合で全員が少しずつ力を出しやすくなり、不祥事も起きにくくなる',
+      ];
       return ev;
     }
     return null;

@@ -228,3 +228,20 @@ body { background: var(--bg); color: var(--ink); }
 .scoutpick__ab { color: var(--ink-mute); flex: 1 1 260px; min-width: 0; }
 .scoutpick__feel { color: var(--navy); font-weight: 700; }
 .scoutpick__btns { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 投手の残りスタミナのバー */
+.stbar { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; vertical-align: middle; }
+.stbar__track { display: inline-block; width: 64px; height: 7px; background: var(--line-soft); border: 1px solid var(--line); position: relative; }
+.stbar__track b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+.stbar--mid .stbar__track b { background: var(--r-d); }
+.stbar--low .stbar__track b { background: var(--ng); }
+.stbar__word { font-size: 12px; color: var(--ink-mute); }
+.stbar--low .stbar__word { color: var(--ng); font-weight: 700; }
+.spchange { margin-left: 8px; }
+/* 打撃成績＋打席結果の表。選手名は横にスクロールしても左に残す */
+.batpa { border-collapse: separate; border-spacing: 0; }
+.batpa th, .batpa td { white-space: nowrap; }
+.batpa .sticky { position: sticky; left: 0; background: var(--bg); z-index: 1; box-shadow: 1px 0 0 var(--line); }
+.batpa .inn--first { border-left: 2px solid var(--line); }
+.seasonlines tr.is-none td { color: var(--ink-faint); }
+.seasonlines small { color: var(--ink-mute); margin-left: 2px; }
+.tbllabel { margin: 8px 0 2px; font-size: 13px; font-weight: 700; color: var(--ink-mute); }

@@ -75,7 +75,6 @@ function makeAuto(G, policy) {
       }
       case 'RETIREMENT': E.endRetirement(state); return true;
       case 'NEW_MEMBER':
-        if (state.sets) { E.pickGeneral(state, bestSet(state.sets.list)); return true; }
         E.finishNewMember(state); return true;
       case 'PRO_CHOICE': E.chooseProEntry(state, !!policy.goPro); return true;
       case 'DISBAND': G.Soccer.start(state); return true;

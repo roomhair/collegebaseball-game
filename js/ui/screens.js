@@ -158,11 +158,11 @@ const Screens = (() => {
           '　球速 <b class="rankval">' + sp.velo + '</b>km/h' +
           '　制球 ' + UI.rankNum(sp.control) +
           '　スタミナ ' + UI.rankNum(sp.stamina) +
-          '　<span class="spfat' + (Team.staminaTier(sp) !== 'lo' ? ' is-tired' : '') + '">' +
-            esc(Team.staminaLabel(sp)) + '</span>' +
+          '　' + UI.staminaBar(sp) +
         '</span>' +
-        '<span class="spballs">' + pitchText(sp) + '</span></p>' : '') +
-      (opts.pickable ? starterPicker(t) : '') +
+        '<span class="spballs">' + pitchText(sp) + '</span>' +
+        (opts.pickable ? '<button type="button" class="btn btn--small spchange" id="btn-starter">先発を変える</button>' : '') +
+        '</p>' : '') +
       '</div>';
   }
 
@@ -173,23 +173,21 @@ const Screens = (() => {
       '<span class="pball">' + esc(q.name) + '<b>' + q.level + '</b></span>').join('');
   }
 
-  /** 先発を選ぶ列。試合前の画面だけに出す */
+  /** 先発を選ぶポップアップの中身 */
   function starterPicker(t) {
     const rot = (t.rotation || []).map((id) => Team.find(t, id)).filter(Boolean);
-    if (rot.length < 2) return '';
-    return '<div class="spick">' +
-      '<div class="spick__head">先発を選ぶ</div>' +
+    return '<h3 class="modal__title">先発を選ぶ</h3>' +
+      '<p class="time__where">スタミナのバーが短い投手は、前の試合の疲れが残っています。</p>' +
       '<div class="spick__list">' + rot.map((p, i) =>
         '<button type="button" class="spick__item' + (i === 0 ? ' is-on' : '') + '" data-pid="' + p.id + '">' +
           '<span class="spick__nm">' + esc(p.name) + '</span>' +
-          '<span class="spick__fat' + (Team.staminaTier(p) !== 'lo' ? ' is-tired' : '') + '">' +
-            esc(Team.staminaLabel(p)) + '</span>' +
+          '<span class="spick__fat">' + UI.staminaBar(p) + '</span>' +
           '<span class="spick__meta">' + p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
             '　球速 <b class="rankval">' + p.velo + '</b>km/h' +
             '　制球 ' + UI.rankNum(p.control) + '　スタミナ ' + UI.rankNum(p.stamina) + '</span>' +
           '<span class="spick__balls">' + pitchText(p) + '</span>' +
         '</button>').join('') +
-      '</div></div>';
+      '</div>';
   }
 
   /* ---------- 特訓期間 ---------- */
@@ -394,19 +392,19 @@ const Screens = (() => {
     bindRows(body, open);
     body.querySelectorAll('.pitname').forEach((b) =>
       b.addEventListener('click', () => open(b.dataset.pid)));
-    /* 先発を選ぶ。押された投手を起用順のいちばん前に持ってくる */
-    body.querySelectorAll('.spick__item').forEach((b) => {
-      b.addEventListener('click', () => {
-        const pid = b.dataset.pid;
-        const rot = view.rotation.slice();
-        const i = rot.indexOf(pid);
-        if (i <= 0) return;
-        rot.splice(i, 1); rot.unshift(pid);
-        view.rotation = rot;
-        College.syncBack(state, view);
-        onChange();
-        pregame(state, opts);
-      });
+    /* 先発を選ぶ。ポップアップで押された投手を起用順のいちばん前に持ってくる */
+    const sb = body.querySelector('#btn-starter');
+    if (sb) sb.addEventListener('click', () => {
+      UI.modal(starterPicker(view), { kind: 'starter', onOpen(mb) {
+        mb.querySelectorAll('.spick__item').forEach((b) => b.addEventListener('click', () => {
+          const pid = b.dataset.pid;
+          const rot = view.rotation.slice();
+          const i = rot.indexOf(pid);
+          if (i > 0) { rot.splice(i, 1); rot.unshift(pid); view.rotation = rot; College.syncBack(state, view); onChange(); }
+          UI.closeModal.back = null; UI.closeModal.after = null; UI.closeModal();
+          pregame(state, opts);
+        }));
+      } });
     });
     UI.show('screen-pregame');
   }

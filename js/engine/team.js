@@ -248,8 +248,7 @@ const Team = (() => {
     /* 大学版：残りスタミナ（%）を持っているときは、それも添える */
     if (p.pstam != null) {
       const f2 = 1 - p.pstam / 100;
-      const w = f2 >= 0.70 ? '消耗大' : f2 >= 0.40 ? 'やや消耗' : f2 >= 0.18 ? '軽い消耗' : '万全';
-      return w + '（残り' + Math.round(p.pstam) + '%）';
+      return f2 >= 0.55 ? '消耗大' : f2 >= 0.30 ? 'やや消耗' : f2 >= 0.12 ? '軽い消耗' : '万全';
     }
     const f = staminaCarryFrac(p);
     if (f >= 0.70) return '消耗大';
