@@ -41,6 +41,7 @@ const Universities = (() => {
         state.unis[id].level = Math.round(state.unis[id].level * 10) / 10;
       });
     });
+    [1, 2, 3].forEach((d) => state.divisions[d].forEach((id) => { state.unis[id].startDiv = d; }));
     state.userUni = USER_ID;
   }
 

@@ -128,6 +128,7 @@ const Pro = (() => {
     state.match = { kind: 'pro', oppId, oppName: teamName(state, oppId), label, big: S.stage !== 'regular',
                     noCold: true, maxInnings: 12, mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);
+    College.pickRestedStarter(view);
     College.syncBack(state, view);
     state.step = 'pregame';
     return true;

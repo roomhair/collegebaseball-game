@@ -81,7 +81,7 @@ const App = (() => {
       try { Engine.check(state); } catch (e) { console.error(e); }
     }
     /* 不祥事・出来事はカードとカードのあいだ（次の節の画面に入る前）に出す */
-    if ((state.pending || []).length && GAME_STEPS.indexOf(state.step) < 0 && state.step !== 'cardEnd') { showPending(); return; }
+    if ((state.pending || []).length && ['game', 'verdict', 'growth', 'result', 'cardEnd'].indexOf(state.step) < 0) { showPending(); return; }
     if (state.mode === 'soccer') { renderSoccer(); return; }
     if (state.mode === 'pro') { renderPro(); return; }
     renderCollege();
@@ -232,6 +232,9 @@ const App = (() => {
       extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
     Screens.pregame(state, { view, extra });
+    /* まとめて進めるボタンは、リーグ戦と入れ替え戦だけ */
+    UI.el('btn-auto-card').hidden = !(m.kind === 'league' || m.kind === 'playoff');
+    UI.el('btn-auto-league').hidden = m.kind !== 'league';
   }
 
   function playLive() {
@@ -273,21 +276,43 @@ const App = (() => {
     runGame(g.step || 0);
   }
 
+  /* 試合のあとは結果の画面1枚にまとめる（勝敗・成長・成績・カードの状況・順位表） */
   function finishGame(res) {
     const out = Engine.afterGame(state, res, view);
     lastSim = { res, meta: { mySide: state.match.mySide, label: state.match.label, report: out.report, team: view } };
-    save();
     afterGameCurtain();
-    Screens.verdict(state);
+    showResult();
   }
 
   function autoPlay() {
     if (!state || state.step !== 'pregame') return;
     const out = Engine.autoGame(state);
     lastSim = { res: out.res, meta: { mySide: state.match.mySide, label: state.match.label, report: out.report, team: out.view } };
-    save();
     afterGameCurtain();
-    Screens.verdict(state);
+    showResult();
+  }
+
+  /** このカードの残りをまとめておまかせ。最後の試合の結果画面に、カードの全試合を添える */
+  function autoCardPlay() {
+    if (!state || state.step !== 'pregame') return;
+    const r = Engine.autoCard(state);
+    if (!r.last) return;
+    lastSim = { res: r.last.res, meta: { mySide: state.match.mySide, label: state.match.label, report: r.last.report, team: r.last.view,
+      cardGames: r.games } };
+    afterGameCurtain();
+    showResult();
+  }
+
+  /** リーグ戦の残りをまとめておまかせ。出来事が起きたらそこで止まる */
+  function autoLeaguePlay() {
+    if (!state || state.step !== 'pregame') return;
+    UI.confirmBox({ title: 'リーグ戦の残りをおまかせ', body: 'このカードからリーグ戦の最後まで、結果だけで進めます。不祥事などの出来事が起きたら、そこで一旦止まります。', yes: 'おまかせで進める' }, () => {
+      const sum = Engine.autoLeague(state);
+      lastSim = null;
+      save();
+      toast(sum.games + '試合をおまかせで進めました（' + sum.w + '勝' + sum.l + '敗' + (sum.d ? sum.d + '分' : '') + '）' + (sum.stopped ? '。出来事が起きたので止めました' : ''));
+      render();
+    });
   }
 
   function afterGameCurtain() {
@@ -300,13 +325,32 @@ const App = (() => {
   function showResult() {
     state.step = 'result';
     save();
-    let extra = '';
-    if (lastSim.meta && (state.match.kind === 'league')) {
-      const div = Universities.divOf(state, state.userUni);
-      extra = '<h4 class="sub">' + div + '部　順位表</h4>' + CS.standingsTable(state, state.season, div);
+    const m = state.match, r = state.lastResult || {};
+    let top = '', extra = '';
+    /* 勝敗の画面に出していたこと（カードの状況・ケガ）を、結果画面の頭に */
+    if (r.card) {
+      const games = (lastSim.meta.cardGames || []);
+      top += '<p class="cardstat">このカード <b>' + r.card.w + '勝' + r.card.l + '敗' + (r.card.d ? r.card.d + '分' : '') + '</b>' +
+        (r.card.done ? (m.kind === 'playoff' ? '　入れ替え戦の決着' : (r.card.won ? '　<b class="good">勝ち点を獲得</b>' : '　<b class="bad">勝ち点を落とした</b>')) : '') +
+        (games.length > 1 ? '<span class="muted">（おまかせ：' + games.map((g) => g.my + '-' + g.op).join('、') + '）</span>' : '') + '</p>';
     }
-    GameScreen.result(state, lastSim.res, Object.assign({}, lastSim.meta, { extra }));
-    UI.el('btn-result-next').textContent = nextLabel();
+    if (m.kind === 'national') {
+      top += '<p class="cardstat">' + (r.replay ? '引き分け。再試合になる' : (r.win ? (state.national.done ? '優勝！' : '次の回へ進む') : 'ここで敗退')) + '</p>';
+    }
+    if ((r.injuries || []).length) top += '<p class="note note--warn">負傷：' + r.injuries.map((x) => UI.esc(x.name) + '（' + UI.esc(x.text) + '・' + x.games + '試合）').join('、') + '</p>';
+    if (m.kind === 'league') {
+      const div = Universities.divOf(state, state.userUni);
+      const se = state.season;
+      if (r.card && r.card.done) {
+        extra += '<h4 class="sub">この節の結果</h4><ul class="cardlist">' + (se.schedule[div][se.round] || []).map((k) => CS.cardLineHtml(state, se.cards[k])).join('') + '</ul>';
+      }
+      extra += '<h4 class="sub">' + div + '部　順位表</h4>' + CS.standingsTable(state, se, div);
+    }
+    if (m.kind === 'national') extra += '<h4 class="sub">組み合わせ</h4><div class="bracket">' + CS.bracket(state, state.national) + '</div>';
+    GameScreen.result(state, lastSim.res, Object.assign({}, lastSim.meta, { top, extra }));
+    const label = nextLabel();
+    UI.el('btn-result-next').textContent = label;
+    UI.el('btn-result-next-top').textContent = label;
   }
 
   /** 結果画面のボタンに「次に何が起きるか」を書く */
@@ -314,11 +358,13 @@ const App = (() => {
     const m = state.match, r = state.lastResult || {};
     if (m.kind === 'league' || m.kind === 'playoff') {
       const c = Engine.currentCard(state);
-      return c && !c.done ? '同じカードの第' + (c.games.length + 1) + '戦へ' : 'カードの結果へ';
+      if (c && !c.done) return '第' + (c.games.length + 1) + '戦の試合前へ';
+      if (m.kind === 'playoff') return '入れ替え戦の結果へ';
+      return state.season.round >= 4 ? 'リーグ戦の最終順位へ' : '第' + (state.season.round + 2) + '節の試合前へ';
     }
     if (m.kind === 'national') {
       if (r.replay) return '再試合へ';
-      return (state.national.done || !state.national.alive) ? '大会の結果へ' : '次の回の組み合わせへ';
+      return (state.national.done || !state.national.alive) ? '大会の結果へ' : National.roundName(state.national.round) + 'の試合前へ';
     }
     if (m.kind === 'pro') return state.pro.season.stage === 'regular' ? '順位表へ' : 'シリーズの状況へ';
     return '次へ';
@@ -521,6 +567,9 @@ const App = (() => {
 
     on('btn-play', playLive);
     on('btn-auto', autoPlay);
+    on('btn-auto-card', autoCardPlay);
+    on('btn-auto-league', autoLeaguePlay);
+    on('btn-result-next-top', resultNext);
     on('btn-pregame-lineup', () => UI.lineupEditor(view, () => { College.syncBack(state, view); save(); showPregame(); }));
     on('btn-skip', () => GameScreen.skip());
     on('btn-verdict-next', () => { state.step = 'growth'; save(); Screens.growth(state); });

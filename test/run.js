@@ -297,14 +297,16 @@ section('同じ部の大学：部員を保存し、年をまたいで同じ選�
   /* 翌年：4年生は卒業、残りは同じ選手が1学年上がって残る */
   const g3 = Team.all(s.rosters[ids[0]]).filter((p) => p.grade <= 3).map((p) => [p.id, p.grade]);
   const g4 = Team.all(s.rosters[ids[0]]).filter((p) => p.grade === 4).map((p) => p.id);
+  const created = s.rosters[ids[0]].createdSeq;
   const y = s.year;
   runUntil(s, A, (x) => x.year === y + 1 && x.phase === 'SPRING_LEAGUE', 6000);
   const still = s.rosters[ids[0]];
-  if (still) {
+  /* 途中で別の部へ移って作り直された場合は、比べられないので飛ばす */
+  if (still && still.createdSeq === created) {
     const now = new Map(Team.all(still).map((p) => [p.id, p.grade]));
     ok(g3.every(([id, g]) => now.get(id) === g + 1), '1〜3年生は同じ選手のまま進級');
     ok(g4.every((id) => !now.has(id)), '4年生は卒業していなくなる');
-    ok(Team.all(still).filter((p) => p.grade === 1).length >= 3, '新入生が入る');
+    ok(Team.all(still).filter((p) => p.grade === 1).length >= 1, '新入生が入る（卒業した人数ぶん）');
   } else {
     ok(true, '（所属が変わったため、その大学の部員は入れ替わった）');
   }
@@ -374,6 +376,40 @@ section('投手のスタミナ：1戦目に投げたエースは2戦目に消耗
   Engine.autoGame(s);
   const used = s.team.pitchers.filter((p) => p.pstam < 100);
   ok(used.length >= 1, '試合で投げた投手の残りスタミナが減る');
+}
+
+/* ---------- おまかせとサクサク進行 ---------- */
+section('おまかせ：選んだ先発がそのまま投げる／カード・リーグ戦をまとめて進める');
+{
+  const { s, A } = newState();
+  runUntil(s, A, (x) => x.phase === 'SPRING_LEAGUE' && x.step === 'pregame', 2000);
+  ok(s.step === 'pregame', 'リーグ戦は節の画面を挟まず、すぐ試合前になる');
+  /* 監督が2番手を先発に選んでおまかせ → その投手が投げてスタミナが減る */
+  const v = College.matchTeam(s);
+  const pick = Team.find(v, v.rotation[1]);
+  v.rotation = [pick.id].concat(v.rotation.filter((id) => id !== pick.id));
+  College.syncBack(s, v);
+  Engine.autoGame(s);
+  ok(pick.game.gs === 1, 'おまかせでも、監督が選んだ先発が投げる');
+  ok(pick.pstam < 100, '先発した投手のスタミナが減る（' + pick.pstam + '%）');
+  Engine.nextAfterGame(s);
+  /* 2戦目の試合前：先発予定は疲れの抜けた投手 */
+  if (s.step === 'pregame' && s.match.kind === 'league') {
+    const st = Team.find(s.team, s.team.rotation[0]);
+    ok(st.id !== pick.id && st.pstam >= College.STAM.RESTED, '次の試合の先発予定は、疲れの抜けた投手になっている');
+    const r = Engine.autoCard(s);
+    ok(r.games.length >= 1 && s.lastResult.card.done, 'このカードをおまかせで最後まで進められる（' + r.games.length + '試合）');
+    Engine.nextAfterGame(s);
+  }
+  invariants(s);
+  /* リーグ戦の残りをおまかせ（出来事が起きたら止まる） */
+  let guard = 0;
+  while (/_LEAGUE$/.test(s.phase) && s.step === 'pregame' && guard++ < 20) {
+    const sum = Engine.autoLeague(s);
+    if (sum.stopped) { while (s.pending.length) Engine.answerPending(s, s.pending[0].options ? s.pending[0].options[0].key : null); }
+  }
+  ok(!/_LEAGUE$/.test(s.phase) || s.step === 'final', 'リーグ戦の残りをおまかせで最後まで進められる（' + s.phase + '/' + s.step + '）');
+  invariants(s);
 }
 
 /* ---------- 大学名変更で履歴が壊れない ---------- */

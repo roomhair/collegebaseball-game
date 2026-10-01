@@ -39,6 +39,7 @@ const Rivals = (() => {
     const u = state.unis[id];
     const t = Universities.makeRoster(u.name, u.level, { persona: true });
     t.uniId = id;
+    t.createdSeq = state.seasonSeq || 0;   // いつ部員を作ったか（作り直されたかを見分ける）
     Team.all(t).forEach((p) => { mark(p, state.year - (p.grade - 1)); });
     t.captainId = Team.all(t).slice().sort((a, b) => (b.grade - a.grade) || (b.persona.lead - a.persona.lead))[0].id;
     state.rosters[id] = t;
