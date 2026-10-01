@@ -211,3 +211,5 @@ body { background: var(--bg); color: var(--ink); }
   .appbar__title { font-size: 15px; letter-spacing: .08em; }
   .appbar__btn span { display: none; }
 }
+.unibtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
+.unibtns small { color: var(--ink-mute); font-weight: 400; }

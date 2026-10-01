@@ -491,14 +491,54 @@ const CS = (() => {
     const nextDivs = '<details class="rosterbox"><summary>来季（現在）の所属</summary>' + [1, 2, 3].map((d) =>
       '<p><b>' + d + '部</b>：' + state.divisions[d].map((id) => (id === state.userUni ? '<b>' + esc(uni(state, id)) + '</b>' : esc(uni(state, id)))).join('、') + '</p>').join('') + '</details>';
     const rivals = Records.rivals(state);
+    const myDiv = Universities.divOf(state, state.userUni);
+    const rostered = Object.keys(state.rosters || {});
+    const rosterBtns = rostered.length
+      ? '<h3 class="sub">' + myDiv + '部の大学の部員</h3><p class="note">同じ部の5校は部員を記録しています。選手は年をまたいで残り、成長し、卒業していきます。</p>' +
+        '<div class="unibtns">' + rostered.map((id) => {
+          const h = state.records.h2h[id];
+          return '<button type="button" class="btn btn--small" data-roster="' + id + '">' + esc(uni(state, id)) +
+            (h ? '<small>　通算' + h.w + '勝' + h.l + '敗' + h.d + '分</small>' : '') + '</button>';
+        }).join('') + '</div>'
+      : '';
     show(
       '<h2 class="section-title">' + esc(state.names.league) + '</h2>' +
       '<p class="section-lead">18大学・3部制。各部6校の総当たりで、カードは2勝先取。順位は 勝ち点 → 勝率 → 直接対決 → 得失点差 → 抽選。</p>' +
       (se ? '<p class="note">いまは第' + (se.round + 1) + '節。</p>' : '') +
-      tables + nextDivs +
+      tables + rosterBtns + nextDivs +
       (rivals.length ? '<h3 class="sub">ライバル</h3><ul class="rivals">' + rivals.map((r) => '<li><b>' + esc(uni(state, r.id)) + '</b>　通算 ' + r.w + '勝' + r.l + '敗' + r.d + '分</li>').join('') + '</ul>' : '') +
       '<div class="actions"><button type="button" class="btn btn--wide" id="l-back">戻る</button></div>',
-      (root) => on(root, '#l-back', h.back));
+      (root) => {
+        on(root, '#l-back', h.back);
+        on(root, '[data-roster]', (b) => rivalRoster(state, b.dataset.roster));
+      });
+  }
+
+  /** 同じ部の大学の部員一覧（ふきだし） */
+  function rivalRoster(state, id) {
+    const t = Rivals.get(state, id);
+    if (!t) return;
+    const cap = Team.captain(t);
+    const byGrade = [1, 2, 3, 4].map((g) => Team.all(t).filter((p) => p.grade === g).length);
+    const draw = () => {
+      UI.closeModal.back = null;
+      UI.modal('<h3 class="modal__title">' + esc(uni(state, id)) + '</h3>' +
+        '<p class="time__where">チーム力 ' + Team.strength(t) + '　部員' + Team.all(t).length + '人（' + byGrade.map((n, i) => (i + 1) + '年' + n).join('・') + '）' +
+          (cap ? '　主将 ' + esc(cap.name) : '') + '</p>' +
+        '<h4 class="sub">野手</h4>' + UI.rosterTable(t.batters, { team: t }) +
+        '<h4 class="sub">投手</h4>' + UI.rosterTable(t.pitchers, { team: t }),
+        { kind: 'roster', onOpen(body) {
+          body.querySelectorAll('tr.prow').forEach((tr) => tr.addEventListener('click', () => {
+            const p = Team.find(t, tr.dataset.pid);
+            if (!p) return;
+            UI.modal(UI.playerDetail(p, { rename: false, team: t, state }) +
+              '<div class="actions actions--modal"><button type="button" class="btn" id="rv-back">部員一覧に戻る</button></div>',
+              { kind: 'player', onOpen(b2) { b2.querySelector('#rv-back').addEventListener('click', draw); } });
+            UI.closeModal.back = draw;
+          }));
+        } });
+    };
+    draw();
   }
 
   /* ---------- 成績 ---------- */
@@ -595,6 +635,7 @@ const CS = (() => {
           N.proLeagueA = v('sn-pa', N.proLeagueA); N.proLeagueB = v('sn-pb', N.proLeagueB);
           N.proLeagueFinal = v('sn-pf', N.proLeagueFinal); N.proSeries = v('sn-ps', N.proSeries);
           Object.keys(state.unis).forEach((id) => { state.unis[id].name = v('su-' + id, state.unis[id].name).slice(0, 14); });
+          Object.keys(state.rosters || {}).forEach((id) => { state.rosters[id].name = state.unis[id].name; });
           state.proTeamNames = state.proTeamNames.map((n, i) => v('sp-' + i, n));
           if (state.team) state.team.name = state.unis[state.userUni].name;
           if (state.national) {

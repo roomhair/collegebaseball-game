@@ -71,6 +71,8 @@ const Universities = (() => {
     Object.keys(state.unis).forEach((id) => {
       if (id === state.userUni) return;
       const u = state.unis[id];
+      /* 部員を保存している大学は、部員から強さを決める（rivals.js） */
+      if (state.rosters && state.rosters[id]) { u.recent = Math.max(0, (u.recent || 0) * 0.5); return; }
       const d = divOf(state, id) || 3;
       const tgt = targetLevel(u, d) + Math.min(3, (u.recent || 0) * 0.8);
       u.level = u.level + (tgt - u.level) * 0.38 + RNG.norm(0, 1.9);

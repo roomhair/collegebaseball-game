@@ -75,6 +75,7 @@ const Engine = (() => {
       achievements: { proEntries: 0, proSeasons: 0, soccer: 0, revived: 0 },
     };
     Universities.init(state, opt.uniName || null);
+    Rivals.sync(state);
     Records.init(state);
     state.sets = { kind: 'bat', list: College.teamSets('batter', CONFIG.PICK_SETS, state.year) };
     return state;
@@ -184,6 +185,7 @@ const Engine = (() => {
     state.playoffs = null;
     state.national = null;
     state.seasonInfo = { div: Universities.divOf(state, state.userUni), playoff: null, national: null };
+    Rivals.seasonStart(state);
     College.seasonStart(state);
     College.rest(state, 100);
     state.opponent = null;
@@ -232,7 +234,14 @@ const Engine = (() => {
     } else {
       return false;
     }
-    if (!state.opponent || state.opponent.__key !== key) {
+    if (kind === 'league' && Rivals.has(state, oppId)) {
+      /* 同じ部の大学は、保存してある部員がそのまま出てくる */
+      if (!state.opponent || state.opponent.__key !== key || state.opponent.uniId !== oppId) {
+        state.opponent = Rivals.get(state, oppId);
+        state.opponent.__key = key;
+        state.opponent.__oppId = oppId;
+      }
+    } else if (!state.opponent || state.opponent.__key !== key) {
       state.opponent = Universities.makeRoster(oppName, level);
       state.opponent.__key = key;
       state.opponent.__oppId = oppId;
@@ -302,7 +311,23 @@ const Engine = (() => {
       walkoff: res.walkoff && m.mySide === 'home', log: res.log, mySide: m.mySide,
     };
     const post = College.postGame(state, view, ctx);
+    const rival = m.kind === 'league' && Rivals.has(state, m.oppId);
+    if (rival) {
+      /* 保存してある相手は、自校との試合でも成長する（強奪高校野球の成長の式そのまま） */
+      Growth.afterGame(state.opponent, Object.assign({}, ctx, {
+        win: !win && !draw, draw, oppName: state.team.name,
+        walkoff: res.walkoff && m.mySide === 'away',
+        mySide: m.mySide === 'away' ? 'home' : 'away',
+      }));
+    }
     Growth.commitStats(state.opponent);
+    if (rival) {
+      Team.restPitchers(state.opponent);
+      Team.all(state.opponent).forEach((p) => { p.formBias = 0; });
+      /* 保存・読み込みで別の物になっていても、ここで部員の側へ書き戻す */
+      state.rosters[m.oppId] = state.opponent;
+      Rivals.refresh(state, m.oppId);
+    }
     College.syncBack(state, view);
 
     report(post.report, state);
@@ -411,6 +436,7 @@ const Engine = (() => {
 
   function finishLeague(state) {
     const season = state.season;
+    Rivals.seasonEnd(state);
     const me = League.rankOfTeam(season, state.userUni);
     const info = state.seasonInfo;
     info.div = me.div; info.rank = me.rank; info.row = me.row;
@@ -600,10 +626,12 @@ const Engine = (() => {
     });
     /* スカウトの結果（推薦で来る新入生と、他へ行った有望選手） */
     if (state.scouting) Scouting.resolve(state, state.scouting);
+    const joiners = Rivals.joinersFrom(state, state.scouting);
     state.year++;
     state.term = 'spring';
     state.scandal = Math.max(0, (state.scandal || 0) * 0.6 - 0.5);
     Universities.evolve(state);
+    Rivals.yearTurn(state, joiners);
     startNewMember(state);
   }
 
@@ -663,6 +691,7 @@ const Engine = (() => {
     if (state.mode === 'college' && state.team) {
       League.check(state);
       College.check(state);
+      Rivals.check(state);
     }
     return true;
   }

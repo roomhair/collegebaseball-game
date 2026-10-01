@@ -3,7 +3,7 @@
 const { load } = require('./load');
 const { makeAuto } = require('./auto');
 const G = load();
-const { Engine, Team, Player, League, Universities, College, Incidents, Records, Soccer, Pro, Storage, CONFIG } = G;
+const { Engine, Team, Player, League, Universities, College, Incidents, Records, Soccer, Pro, Storage, CONFIG, Rivals } = G;
 
 let fails = 0, passes = 0;
 function ok(cond, msg) { if (cond) { passes++; } else { fails++; console.log('  ✗ ' + msg); } }
@@ -267,6 +267,65 @@ section('プロ野球ルート：6季連続優勝 → 参戦 → 1シーズン �
   ok(c.mode === 'college', '「大学野球を続ける」で大学に残る');
   c.seasonInfo = { champion: false }; c.streak = 0;
   ok(c.streak === 0, '優勝を逃すと連続記録は0に戻る');
+}
+
+/* ---------- 同じ部の大学の部員 ---------- */
+section('同じ部の大学：部員を保存し、年をまたいで同じ選手が出てくる');
+{
+  const { s, A } = newState();
+  const div = Universities.divOf(s, s.userUni);
+  const ids = Object.keys(s.rosters).sort();
+  ok(ids.length === 5 && ids.every((id) => Universities.divOf(s, id) === div), '自校と同じ部の5校の部員を持つ');
+  ok(ids.every((id) => Math.abs(s.unis[id].level - Team.strength(s.rosters[id])) < 0.11), '大学の強さは部員から計算される');
+  runUntil(s, A, (x) => x.phase === 'SPRING_LEAGUE' && x.step === 'pregame', 2000);
+  const opp = s.match.oppId;
+  ok(Rivals.has(s, opp) && s.opponent === s.rosters[opp], '試合の相手は保存してある部員');
+  const oppIds = Team.all(s.rosters[opp]).map((p) => p.id);
+  Engine.autoGame(s);
+  const after = s.rosters[opp];
+  ok(Team.all(after).some((p) => (p.career.pa || 0) + (p.career.outs || 0) > 0), '自校との対戦成績が相手の選手に残る');
+  /* 保存→読み込みしても、試合の結果は部員の側に書き戻される */
+  const loaded = JSON.parse(JSON.stringify(s));
+  const A2 = makeAuto(G, {});
+  runUntil(loaded, A2, (x) => x.phase === 'SPRING_LEAGUE' && x.step === 'pregame' && x.match.oppId === opp && Engine.currentCard(x).games.length >= 1, 300);
+  if (loaded.step === 'pregame' && loaded.match.oppId === opp) {
+    const before = Team.all(loaded.rosters[opp]).reduce((a, p) => a + (p.career.pa || 0) + (p.career.outs || 0), 0);
+    Engine.autoGame(loaded);
+    const now = Team.all(loaded.rosters[opp]).reduce((a, p) => a + (p.career.pa || 0) + (p.career.outs || 0), 0);
+    ok(now > before, '読み込み後の試合も相手の部員に記録される');
+  }
+  /* 翌年：4年生は卒業、残りは同じ選手が1学年上がって残る */
+  const g3 = Team.all(s.rosters[ids[0]]).filter((p) => p.grade <= 3).map((p) => [p.id, p.grade]);
+  const g4 = Team.all(s.rosters[ids[0]]).filter((p) => p.grade === 4).map((p) => p.id);
+  const y = s.year;
+  runUntil(s, A, (x) => x.year === y + 1 && x.phase === 'SPRING_LEAGUE', 6000);
+  const still = s.rosters[ids[0]];
+  if (still) {
+    const now = new Map(Team.all(still).map((p) => [p.id, p.grade]));
+    ok(g3.every(([id, g]) => now.get(id) === g + 1), '1〜3年生は同じ選手のまま進級');
+    ok(g4.every((id) => !now.has(id)), '4年生は卒業していなくなる');
+    ok(Team.all(still).filter((p) => p.grade === 1).length >= 3, '新入生が入る');
+  } else {
+    ok(true, '（所属が変わったため、その大学の部員は入れ替わった）');
+  }
+  Rivals.check(s);
+  /* 所属が変わったら、新しい部の5校に入れ替わる */
+  const d2 = Universities.divOf(s, s.userUni);
+  ok(Object.keys(s.rosters).length === 5 && Object.keys(s.rosters).every((id) => Universities.divOf(s, id) === d2), '自校の所属に合わせて5校がそろう');
+  /* スカウトで取り合いに負けた選手が、同じ部の大学に入る */
+  const s3 = newState().s;
+  const sc = G.Scouting.start(s3);
+  const target = Object.keys(s3.rosters)[0];
+  sc.cands[0].dest = { kind: 'uni', uni: target, text: '' };
+  const j = Rivals.joinersFrom(s3, sc);
+  Rivals.yearTurn(s3, j);
+  ok(!!Team.find(s3.rosters[target], sc.cands[0].player.id), 'スカウトで他大学へ行った選手が、その大学の部員として現れる');
+  /* 長く回しても強さが目安から外れない */
+  const s4 = Engine.newGame(); const A4 = makeAuto(G, {});
+  runUntil(s4, A4, (x) => x.year >= CONFIG.START_YEAR + 8 || x.mode !== 'college', 100000);
+  const gaps = Object.keys(s4.rosters || {}).map((id) => s4.unis[id].level - Universities.targetLevel(s4.unis[id], Universities.divOf(s4, id)));
+  ok(gaps.every((g) => Math.abs(g) < 12), '8年後も保存した大学の強さが目安から大きく外れない（' + gaps.map((g) => g.toFixed(1)).join(', ') + '）');
+  void oppIds;
 }
 
 /* ---------- 大学名変更で履歴が壊れない ---------- */

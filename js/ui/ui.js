@@ -460,7 +460,7 @@ const UI = (() => {
       '</div>' +
       abilities +
       personaBlock(p, opts) +
-      '<h4 class="sub">大学通算成績<span class="sub__note">公式戦</span></h4>' +
+      (p.rival ? '<h4 class="sub">自校との対戦成績</h4>' : '<h4 class="sub">大学通算成績<span class="sub__note">公式戦</span></h4>') +
       (isPit ? careerPitLine(p.career) : careerBatLine(p.career)) +
       seasonTable(p) +
       hl + histList(p) +
