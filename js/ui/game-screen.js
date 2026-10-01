@@ -234,7 +234,8 @@ const GameScreen = (() => {
     if (bt) bt.hidden = false;
     /* はじめは「1打席ずつ」。まず1打席ぶんを読んでもらってから、
        速くしたい人が速さを上げる */
-    speed = 0;
+    /* 大学版：はじめからオートで流す。前の試合で選んだ速さを覚えておく */
+    speed = savedSpeed();
     applySpeedButtons();
     UI.show('screen-game');
     /* 中断から戻ったときは、見たところまでを黙って流してから続ける */
@@ -252,9 +253,14 @@ const GameScreen = (() => {
     });
   }
 
+  function savedSpeed() {
+    try { const v = localStorage.getItem('cbbgame.speed'); return v == null ? 1 : +v; } catch (e) { return 1; }
+  }
+
   function setSpeed(v) {
     const was = speed;
     speed = v;
+    try { localStorage.setItem('cbbgame.speed', String(v)); } catch (e) { /* 覚えられなくても続けられる */ }
     applySpeedButtons();
     if (!ctx || ctx.done) return;
     /* 「1打席ずつ」から戻したときは、止まっているので動かし直す */
@@ -920,7 +926,7 @@ const GameScreen = (() => {
     return esc(u.label) + ' +' + u.amount + (u.unit || '');
   }
 
-  function growthList(report) {
+  function growthList(report, open) {
     const awake = report.filter((r) => r.awakened);
     const grew = report.filter((r) => !r.awakened && r.ups.length);
     let html = '';
@@ -931,7 +937,10 @@ const GameScreen = (() => {
         '</div>';
     }
     if (grew.length) {
-      html += '<details class="growthbox"><summary>成長した選手（' + grew.length + '人）</summary>' +
+      /* 伸びの大きい3人の名前だけ見出しに出し、全員ぶんは開いて見る */
+      const tot = (r) => r.ups.reduce((a, u) => a + (u.apt ? 0 : u.amount), 0);
+      const top3 = grew.slice().sort((a, b) => tot(b) - tot(a)).slice(0, 3).map((r) => esc(r.name) + ' +' + tot(r)).join('　');
+      html += '<details class="growthbox"><summary>成長した選手（' + grew.length + '人）<span class="muted">　' + top3 + '</span></summary>' +
         '<ul class="growthlist">' + grew.map((r) =>
           '<li><b>' + esc(r.name) + '</b><span>' + r.ups.map((u) =>
             upText(u)).join('　') + '</span></li>').join('') +
@@ -953,8 +962,9 @@ const GameScreen = (() => {
         esc(state.team.name) + ' <b>' + my.runs + '</b> - <b>' + op.runs + '</b> ' + esc(state.opponent.name) +
         (res.cold ? '<i>（コールド）</i>' : (res.walkoff ? '<i>（サヨナラ）</i>' : '')) + '</p>' +
       UI.decisionLines(state.lastResult || {}) +
+      (meta.top || '') +
       scoreboard(res, res.away.team.name, res.home.team.name) +
-      growthList(meta.report || []) +
+      growthList(meta.report || [], true) +
       '<div class="boxes">' +
         batPaBox(res, mine, state.team.name) +
         pitBox(mine, state.team.name) +

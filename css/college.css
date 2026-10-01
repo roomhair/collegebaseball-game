@@ -245,3 +245,10 @@ body { background: var(--bg); color: var(--ink); }
 .seasonlines tr.is-none td { color: var(--ink-faint); }
 .seasonlines small { color: var(--ink-mute); margin-left: 2px; }
 .tbllabel { margin: 8px 0 2px; font-size: 13px; font-weight: 700; color: var(--ink-mute); }
+/* 見出しの右端にボタンを置く（下までスクロールしなくても進めるように） */
+.titlebar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.titlebar .section-title { flex: 1 1 auto; min-width: 0; }
+.titlebar__btn { flex: none; margin-bottom: 10px; }
+.uni-group { grid-column: 1 / -1; margin-top: 10px; }
+.good { color: var(--accent); }
+.bad { color: var(--ng); }

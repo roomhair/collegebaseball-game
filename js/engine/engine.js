@@ -190,6 +190,7 @@ const Engine = (() => {
     College.rest(state, 100);
     state.opponent = null;
     state.match = null;
+    prepareMatch(state);
   }
 
   function leagueName(state) {
@@ -262,6 +263,8 @@ const Engine = (() => {
     state.match = { kind, oppId, oppName, label, big, noCold, maxInnings,
                     mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);
+    /* 先発予定は、疲れの抜けたいちばん良い投手にしておく（監督は試合前に変えられる） */
+    College.pickRestedStarter(view);
     College.syncBack(state, view);
     state.step = 'pregame';
     return true;
@@ -303,10 +306,7 @@ const Engine = (() => {
 
   /** 結果だけ出す（おまかせ）。テストもこれで回す */
   function autoGame(state) {
-    /* おまかせのときは、自校も疲れの抜けた投手を先発させる */
-    const v0 = College.matchTeam(state);
-    College.pickRestedStarter(v0);
-    College.syncBack(state, v0);
+    /* 先発は監督が試合前に決めたまま（試合前の画面で選んだ投手が投げる） */
     const view = beginGame(state);
     const g = state.liveGame;
     const away = g.mySide === 'away' ? view : state.opponent;
@@ -389,6 +389,7 @@ const Engine = (() => {
       const mineA = card.a === state.userUni;
       League.recordGame(card, mineA ? my.runs : op.runs, mineA ? op.runs : my.runs, res.innings);
       state.lastResult.card = { w: mineA ? card.winsA : card.winsB, l: mineA ? card.winsB : card.winsA, d: card.draws, done: card.done, won: card.done && card.winner === state.userUni };
+      if (card.done && m.kind === 'league') League.simRound(state.season, state.userUni, levelOf(state));
     } else if (m.kind === 'national') {
       Records.game(state, null, my.runs, op.runs);
       if (!draw) {
@@ -419,6 +420,43 @@ const Engine = (() => {
     });
   }
 
+  /**
+   * このカードの残りをおまかせで進める。戻り値は試合ごとの結果。
+   * 最後の試合の結果は state.lastResult に残る（結果画面で見せる）
+   */
+  function autoCard(state) {
+    const games = [];
+    let last = null;
+    for (let guard = 0; guard < 30; guard++) {
+      if (state.step !== 'pregame') break;
+      const kind = state.match && state.match.kind;
+      if (kind !== 'league' && kind !== 'playoff') break;
+      last = autoGame(state);
+      const r = state.lastResult;
+      games.push({ my: r.myRuns, op: r.opRuns, win: r.win, draw: r.draw });
+      if (r.card && r.card.done) break;
+      nextAfterGame(state);
+    }
+    return { games, last };
+  }
+
+  /**
+   * リーグ戦の残りをおまかせで進める。不祥事などの出来事が起きたら、そこで止める
+   * （監督の判断が要るため）。戻り値は進めた試合の数と勝敗
+   */
+  function autoLeague(state) {
+    const sum = { games: 0, w: 0, l: 0, d: 0, stopped: false };
+    for (let guard = 0; guard < 200; guard++) {
+      if (!/_LEAGUE$/.test(state.phase) || state.step !== 'pregame' || !state.match || state.match.kind !== 'league') break;
+      if ((state.pending || []).length) { sum.stopped = true; break; }
+      const r = autoCard(state);
+      r.games.forEach((g) => { sum.games++; if (g.draw) sum.d++; else if (g.win) sum.w++; else sum.l++; });
+      nextAfterGame(state);
+    }
+    if ((state.pending || []).length) sum.stopped = true;
+    return sum;
+  }
+
   /** 試合結果を見終わったあと。次の試合か、カードの終わりか */
   function nextAfterGame(state) {
     const m = state.match;
@@ -426,13 +464,14 @@ const Engine = (() => {
     if (m.kind === 'league' || m.kind === 'playoff') {
       const card = currentCard(state);
       if (card && !card.done) { prepareMatch(state); return; }
-      state.step = 'cardEnd';
       if (m.kind === 'league') {
         League.simRound(state.season, state.userUni, levelOf(state));
+        /* 不祥事・出来事はカードとカードのあいだに起きる（次のカードの試合前に出る） */
         queue(state, Incidents.roll(state, 'league'));
         queue(state, Incidents.rollEvent(state, 'league'));
         Team.all(state.team).forEach((p) => { if (p.suspend && p.suspend.practiceBan > 0) { p.suspend.practiceBan--; } });
       }
+      nextCard(state);
       return;
     }
     if (m.kind === 'national') {
@@ -445,7 +484,6 @@ const Engine = (() => {
       }
       state.opponent = null;
       prepareMatch(state);
-      state.step = 'nextup';
       return;
     }
     if (m.kind === 'pro') Pro.nextAfterGame(state);
@@ -459,7 +497,8 @@ const Engine = (() => {
     state.opponent = null;
     state.match = null;
     if (state.season.done) { finishLeague(state); return; }
-    state.step = 'round';
+    /* 節の画面は挟まず、そのまま次のカードの試合前へ */
+    prepareMatch(state);
   }
 
   /* ---------- リーグ戦の終わり ---------- */
@@ -520,7 +559,7 @@ const Engine = (() => {
   function afterFinal(state) {
     if (/_PLAYOFF$/.test(state.phase)) {
       const card = currentCard(state);
-      if (card && !card.done) { state.step = 'round'; return; }
+      if (card && !card.done) { prepareMatch(state); return; }
     }
     afterPlayoff(state);
   }
@@ -781,7 +820,7 @@ const Engine = (() => {
     toTraining, startTraining, trainTake, trainPass, endTraining,
     queue, pendingTop, answerPending,
     startLeague, currentCard, prepareMatch, matchView, beginGame, autoGame, afterGame, simOpts,
-    nextAfterGame, nextCard, finishPlayoff, playoffOutcome, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
+    nextAfterGame, nextCard, autoCard, autoLeague, finishPlayoff, playoffOutcome, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
     startScouting, endScouting, startRetirement, endRetirement, startNewMember, pickGeneral, finishNewMember,
     chooseProEntry, check, header, uniName, leagueName, levelOf, clone,
   };

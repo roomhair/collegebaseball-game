@@ -152,7 +152,9 @@
       <div class="actions">
         <button type="button" class="btn btn--primary" id="btn-play">試合開始</button>
         <button type="button" class="btn" id="btn-pregame-lineup">オーダー編集</button>
-        <button type="button" class="btn" id="btn-auto">おまかせで試合（結果だけ見る）</button>
+        <button type="button" class="btn" id="btn-auto">この試合をおまかせ</button>
+        <button type="button" class="btn" id="btn-auto-card">このカードをおまかせ</button>
+        <button type="button" class="btn" id="btn-auto-league">リーグ戦の残りをおまかせ</button>
       </div>
     </div>
   </section>
@@ -189,18 +191,21 @@
   <!-- ============ 試合後の成長 ============ -->
   <section class="screen" id="screen-growth">
     <div class="container">
-      <h2 class="section-title">試合後の成長</h2>
-      <div id="growth-body"></div>
-      <div class="actions">
-        <button type="button" class="btn btn--primary btn--wide" id="btn-growth-next">試合結果へ</button>
+      <div class="titlebar">
+        <h2 class="section-title">試合後の成長</h2>
+        <button type="button" class="btn btn--primary titlebar__btn" id="btn-growth-next">試合結果へ</button>
       </div>
+      <div id="growth-body"></div>
     </div>
   </section>
 
   <!-- ============ 試合結果 ============ -->
   <section class="screen" id="screen-result">
     <div class="container container--wide">
-      <h2 class="section-title" id="result-title"></h2>
+      <div class="titlebar">
+        <h2 class="section-title" id="result-title"></h2>
+        <button type="button" class="btn btn--primary titlebar__btn" id="btn-result-next-top">次へ</button>
+      </div>
       <div id="result-body"></div>
       <div class="actions">
         <button type="button" class="btn btn--primary btn--wide" id="btn-result-next">次へ</button>

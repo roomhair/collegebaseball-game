@@ -687,7 +687,16 @@ const CS = (() => {
     const N = state.names;
     const f = (id, label, v, max) => '<label class="field"><span class="field__label">' + esc(label) + '</span>' +
       '<input type="text" id="' + id + '" class="field__input" maxlength="' + (max || 16) + '" value="' + esc(v) + '"></label>';
-    const unis = Object.keys(state.unis).map((id) => f('su-' + id, id === state.userUni ? '自分の大学' : '大学（' + (Universities.divOf(state, id) || '') + '部）', state.unis[id].name, 14)).join('');
+    /* ゲーム開始時の所属（1部→2部→3部）の順に並べる。前の版のデータは今の所属で代用 */
+    const startDiv = (id) => state.unis[id].startDiv || Universities.divOf(state, id) || 3;
+    const uniIds = Object.keys(state.unis).sort((a, b) => (startDiv(a) - startDiv(b)) || (a < b ? -1 : 1));
+    const unis = [1, 2, 3].map((d) =>
+      '<p class="tbllabel uni-group">ゲーム開始時の' + d + '部</p>' +
+      uniIds.filter((id) => startDiv(id) === d).map((id) => {
+        const now = Universities.divOf(state, id);
+        const label = (id === state.userUni ? '自分の大学' : '大学') + (now && now !== d ? '（いまは' + now + '部）' : '');
+        return f('su-' + id, label, state.unis[id].name, 14);
+      }).join('')).join('');
     /* サッカー部・プロ野球の名前は、そのモードに入ってから出す（先に見えるとネタバレになる） */
     const seenSoccer = state.mode === 'soccer' || (state.records.soccerSeasons || []).length > 0 || !!state.soccerArchive;
     const seenPro = state.mode === 'pro' || (state.achievements && state.achievements.proEntries > 0);
@@ -782,6 +791,7 @@ const CS = (() => {
   }
 
   return {
+    cardLineHtml: (state, c) => cardLine(state, c),
     show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
     disband, proChoice, saveBox, dateText, bracket,
