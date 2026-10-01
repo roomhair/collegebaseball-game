@@ -123,6 +123,8 @@ const Pro = (() => {
       state.opponent.__key = key;
     }
     state.opponent.name = teamName(state, oppId);
+    /* プロは毎日試合。1日ぶん回復し、相手は疲れの抜けた投手を先発させる */
+    Engine.restDay(state, 'pro-' + P.no + '-' + S.stage + '-' + S.day + '-' + (S.post ? S.post.games.length : 0), false);
     state.match = { kind: 'pro', oppId, oppName: teamName(state, oppId), label, big: S.stage !== 'regular',
                     noCold: true, maxInnings: 12, mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);

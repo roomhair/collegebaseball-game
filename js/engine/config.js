@@ -56,7 +56,9 @@ const CONFIG = {
      中身の式は強奪高校野球の growth.js のまま */
   GROWTH: {
     PER_GAME_BAT: 11.0 * 0.30,
-    PER_GAME_PIT: 6.9 * 0.30,
+    /* 投手は1カード3試合を2〜3人で回すようになったので（スタミナの持ち越し）、
+       1人が1試合で伸びる幅を野手より大きくしてある */
+    PER_GAME_PIT: 6.9 * 0.30 * 1.9,
     MAX_STEP: 4,
     HEAD_SPAN: 22,
     HEAD_CURVE: 1.9,

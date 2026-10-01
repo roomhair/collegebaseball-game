@@ -142,12 +142,11 @@ const CS = (() => {
 
   function cardLine(state, c) {
     const g = c.games.map((x) => x.a + '-' + x.b + (x.inn > 9 ? '<small>(' + x.inn + ')</small>' : '')).join('　');
-    const res = c.done ? '決着' : '';
     return '<li class="cardline' + (c.a === state.userUni || c.b === state.userUni ? ' is-me' : '') + '">' +
       '<span class="cardline__t">' + esc(uni(state, c.a)) + ' <b>' + c.winsA + '</b> - <b>' + c.winsB + '</b> ' + esc(uni(state, c.b)) +
       (c.draws ? '<small>（' + c.draws + '分）</small>' : '') + '</span>' +
       '<span class="cardline__g">' + g + '</span>' +
-      (c.done ? '<span class="cardline__w">' + res + ' 勝ち点 → ' + esc(uni(state, c.winner)) + '</span>' : '') + '</li>';
+      (c.done ? '<span class="cardline__w">' + (String(c.div).charAt(0) === 'p' ? '勝者 → ' : '勝ち点 → ') + esc(uni(state, c.winner)) + '</span>' : '') + '</li>';
   }
 
   /* ---------- リーグ戦の節 ---------- */
@@ -164,15 +163,16 @@ const CS = (() => {
       ? '入れ替え戦　' + card.upperDiv + '部・' + (card.upperDiv + 1) + '部'
       : Engine.leagueName(state) + '　第' + (se.round + 1) + '節';
     const lead = isPO
-      ? (card.upper === state.userUni ? card.upperDiv + '部残留をかけて、' + (card.upperDiv + 1) + '部優勝校と戦う。2勝した側が来季' + card.upperDiv + '部。' : card.upperDiv + '部昇格をかけて、' + card.upperDiv + '部最下位校と戦う。2勝した側が来季' + card.upperDiv + '部。')
-      : '対戦は2勝先取。引き分けは数えず、どちらかが2勝するまで続く。カードを取ると勝ち点1。';
+      ? (card.upper === state.userUni ? card.upperDiv + '部残留をかけた戦い' : card.upperDiv + '部昇格をかけた戦い')
+      : '';
+    const w = mineA ? card.winsA : card.winsB, l = mineA ? card.winsB : card.winsA;
     show(
       '<h2 class="section-title">' + esc(title) + '</h2>' +
       '<div class="vsbox">' +
         '<p class="vsbox__vs">' + esc(state.team.name) + '　<i>対</i>　<b>' + esc(uni(state, opp)) + '</b></p>' +
-        '<p class="vsbox__card">このカード　<b>' + (mineA ? card.winsA : card.winsB) + '勝' + (mineA ? card.winsB : card.winsA) + '敗' + (card.draws ? card.draws + '分' : '') + '</b>' +
+        '<p class="vsbox__card">次は<b>第' + (card.games.length + 1) + '戦</b>　このカード <b>' + w + '勝' + l + '敗' + (card.draws ? card.draws + '分' : '') + '</b>' +
           (h2h ? '　<span class="muted">通算対戦 ' + h2h.w + '勝' + h2h.l + '敗' + h2h.d + '分</span>' : '') + '</p>' +
-        '<p class="note">' + esc(lead) + '</p>' +
+        (lead ? '<p class="note">' + esc(lead) + '</p>' : '') +
         '<div class="actions">' +
           '<button type="button" class="btn btn--primary btn--wide" id="r-go">第' + (card.games.length + 1) + '戦の試合前へ</button>' +
           '<button type="button" class="btn" id="r-lineup">オーダー変更</button>' +
@@ -197,15 +197,36 @@ const CS = (() => {
     show(
       '<div class="cardend ' + (won ? 'is-win' : 'is-lose') + '">' +
         '<p class="cardend__eyebrow">' + esc(isPO ? '入れ替え戦' : Engine.leagueName(state) + '　第' + (se.round + 1) + '節') + '</p>' +
-        '<h2 class="cardend__title">' + (won ? 'カードを取った' : 'カードを落とした') + '</h2>' +
+        '<h2 class="cardend__title">' + (isPO ? (won ? '入れ替え戦に勝利' : '入れ替え戦に敗戦') : (won ? '勝ち点を獲得' : '勝ち点を落とした')) + '</h2>' +
         '<ul class="cardlist">' + cardLine(state, card) + '</ul>' +
-        (isPO ? '' : '<p class="note">' + (won ? '勝ち点1を獲得。' : '勝ち点は相手に。') + '</p>') +
       '</div>' +
       (isPO ? '' : '<h3 class="sub">' + div + '部　順位表</h3>' + standingsTable(state, se, div) +
         '<details class="rosterbox"><summary>この節の全カードの結果</summary>' + others + '</details>') +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="c-next">' +
         (isPO ? '入れ替え戦の結果へ' : (se.round >= 4 ? 'リーグ戦の最終結果へ' : '第' + (se.round + 2) + '節へ')) + '</button></div>',
       (root) => on(root, '#c-next', h.next));
+  }
+
+  /** 入れ替え戦の結果（昇格・残留・降格） */
+  function playoffResult(state, h) {
+    const o = Engine.playoffOutcome(state);
+    const good = o.result === '昇格' || o.result === '残留';
+    const title = o.result === '昇格' ? o.to + '部昇格！' : o.result === '残留' ? o.from + '部残留' : o.result === '降格' ? o.to + '部へ降格' : '昇格ならず';
+    const lead = o.result === '昇格' ? '来季は' + o.to + '部で戦う。' + esc(uni(state, o.opp)) + 'と入れ替わる。'
+      : o.result === '残留' ? esc(uni(state, o.opp)) + 'を退け、来季も' + o.from + '部。'
+      : o.result === '降格' ? esc(uni(state, o.opp)) + 'に敗れ、来季は' + o.to + '部から出直し。'
+      : esc(uni(state, o.opp)) + 'に阻まれ、来季も' + o.from + '部。';
+    show(
+      '<div class="cardend ' + (good ? 'is-win' : 'is-lose') + ' poresult">' +
+        '<p class="cardend__eyebrow">' + esc(College.termLabel(state)) + '　入れ替え戦</p>' +
+        '<h2 class="cardend__title poresult__title">' + esc(title) + '</h2>' +
+        '<p class="incident__text">' + lead + '</p>' +
+        '<p class="cardstat">入れ替え戦 <b>' + o.w + '勝' + o.l + '敗' + (o.d ? o.d + '分' : '') + '</b></p>' +
+        '<ul class="cardlist">' + cardLine(state, o.card) + '</ul>' +
+      '</div>' +
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="po-next">シーズンを終える</button></div>',
+      (root) => on(root, '#po-next', h.next));
+    if (o.result === '昇格') UI.curtain('<b>' + o.to + '部</b><span>昇格</span>', () => {});
   }
 
   /** リーグ戦の最終順位と入れ替え戦 */
@@ -298,6 +319,7 @@ const CS = (() => {
       '<div class="incident' + (isInc ? ' is-incident' : '') + '">' +
         '<p class="incident__eyebrow">' + (isInc ? '部内で問題が起きた' : '出来事') + '</p>' +
         '<p class="incident__text">' + esc(item.text) + '</p>' +
+        (item.lines && item.lines.length && !isInc ? '<ul class="incident__lines">' + item.lines.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>' : '') +
         (isInc ? '<p class="incident__meta">関わった部員：' + item.names.map(esc).join('・') + '　／　事の重さ：' + sevText + '</p>' +
           '<p class="note">監督としての対応を選んでください。対応によって、処分の重さ・本人の変わり方・チームの空気・大学の評判が変わります。結果は選ぶまで分かりません。</p>' : '') +
         (item.options
@@ -324,26 +346,35 @@ const CS = (() => {
   function scouting(state, h) {
     const sc = state.scouting;
     const pres = Records.prestige(state);
+    const abilityLine = (c) => {
+      const p = c.player;
+      return p.kind === 'pitcher'
+        ? '球速 ' + Scouting.veloText(c) + '　制球 ' + Scouting.abilityText(c, 'control') + '　スタミナ ' + Scouting.abilityText(c, 'stamina')
+        : ['meet', 'power', 'speed', 'arm', 'field', 'catch'].map((k) => ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩', field: '守備', catch: '捕球' })[k] + ' ' + Scouting.abilityText(c, k)).join('　');
+    };
+    const tierName = (t) => (t === 'S' ? '超高校級' : t === 'A' ? '注目株' : t === 'B' ? '有望' : '素材');
+    const buttons = (c) =>
+      '<button type="button" class="btn btn--small" data-look="' + c.id + '"' + (sc.points <= 0 || c.look >= Scouting.MAX_LOOK ? ' disabled' : '') + '>視察する</button>' +
+      '<button type="button" class="btn btn--small' + (c.offered ? ' btn--on' : '') + '" data-offer="' + c.id + '">' + (c.offered ? '推薦枠を取り下げる' : '推薦枠を提示') + '</button>' +
+      (c.offered ? '<button type="button" class="btn btn--small' + (sc.special === c.id ? ' btn--on' : '') + '" data-special="' + c.id + '">' + (sc.special === c.id ? '特待生をやめる' : '特待生にする') + '</button>' : '');
+
     const card = (c) => {
       const p = c.player;
       const isPit = p.kind === 'pitcher';
-      const ab = isPit
-        ? '球速 ' + Scouting.veloText(c) + '　制球 ' + Scouting.abilityText(c, 'control') + '　スタミナ ' + Scouting.abilityText(c, 'stamina')
-        : ['meet', 'power', 'speed', 'arm', 'field', 'catch'].map((k) => ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩', field: '守備', catch: '捕球' })[k] + ' ' + Scouting.abilityText(c, k)).join('　');
       const flags = [
         p.koshien ? esc(state.names.hsNational) + '出場' : esc(state.names.hsNational) + '出場なし',
         p.hsCaptain ? '主将経験あり' : '',
         c.proWish ? '<b class="flag flag--pro">プロ志望</b>' : '',
         c.shakaiWish ? '<b class="flag">社会人志望</b>' : '',
       ].filter(Boolean).join('　');
-      return '<article class="scout' + (c.offered ? ' is-offered' : '') + (sc.special === c.id ? ' is-special' : '') + '">' +
+      return '<article class="scout' + (c.offered ? ' is-offered' : '') + (sc.special === c.id ? ' is-special' : '') + '" data-cid="' + c.id + '">' +
         '<header class="scout__head">' +
-          '<span class="scout__tier tier-' + c.tier + '">' + (c.tier === 'S' ? '超高校級' : c.tier === 'A' ? '注目株' : c.tier === 'B' ? '有望' : '素材') + '</span>' +
+          '<span class="scout__tier tier-' + c.tier + '">' + tierName(c.tier) + '</span>' +
           '<b class="scout__name">' + esc(p.name) + '</b>' +
           '<span>' + (isPit ? '投手' : posName(p.pos)) + '　' + UI.handMark(p) + '　' + p.height + 'cm・' + p.weight + 'kg</span>' +
-          '<span class="muted">' + esc(p.hs) + '</span>' +
         '</header>' +
-        '<p class="scout__ab">' + ab + '</p>' +
+        '<p class="scout__hs">出身校：' + esc(p.hs || '―') + '</p>' +
+        '<p class="scout__ab">' + abilityLine(c) + '</p>' +
         '<p class="scout__flags">' + flags + '</p>' +
         '<dl class="scout__grid">' +
           '<div><dt>性格</dt><dd>' + esc(Scouting.personalityText(c)) + '</dd></div>' +
@@ -355,29 +386,43 @@ const CS = (() => {
         '<footer class="scout__foot">' +
           '<span class="scout__look">視察 ' + c.look + '/' + Scouting.MAX_LOOK + '</span>' +
           (c.offered ? '<span class="scout__feel">手応え：' + Scouting.feel(state, sc, c) + '</span>' : '') +
-          '<button type="button" class="btn btn--small" data-look="' + c.id + '"' + (sc.points <= 0 || c.look >= Scouting.MAX_LOOK ? ' disabled' : '') + '>視察する</button>' +
-          '<button type="button" class="btn btn--small' + (c.offered ? ' btn--on' : '') + '" data-offer="' + c.id + '">' + (c.offered ? '推薦枠を取り下げる' : '推薦枠を提示') + '</button>' +
-          (c.offered ? '<button type="button" class="btn btn--small' + (sc.special === c.id ? ' btn--on' : '') + '" data-special="' + c.id + '">' + (sc.special === c.id ? '特待生をやめる' : '特待生にする') + '</button>' : '') +
+          buttons(c) +
         '</footer>' +
       '</article>';
     };
+
+    /* 推薦枠・特待生を出した選手は上にまとめる。選んだ顔ぶれを見ながら残りを選べるように */
+    const picked = sc.cands.filter((c) => c.offered).sort((a, b) => (b.id === sc.special) - (a.id === sc.special));
+    const pickedHtml = '<section class="scoutpick">' +
+      '<h3 class="sub">推薦枠を出している選手（' + picked.length + ' / ' + CONFIG.ROSTER.REC_SLOTS + '）</h3>' +
+      (picked.length ? '<ul class="scoutpick__list">' + picked.map((c) => {
+        const p = c.player;
+        return '<li class="scoutpick__i' + (sc.special === c.id ? ' is-special' : '') + '">' +
+          (sc.special === c.id ? '<b class="tag tag--gold">特待生</b>' : '<span class="tag">推薦</span>') +
+          '<span class="scoutpick__nm"><b>' + esc(p.name) + '</b>　' + (p.kind === 'pitcher' ? '投手' : posName(p.pos)) + '・' + tierName(c.tier) + '</span>' +
+          '<span class="scoutpick__ab">' + abilityLine(c) + '</span>' +
+          '<span class="scoutpick__feel">手応え：' + Scouting.feel(state, sc, c) + '</span>' +
+          '<span class="scoutpick__btns">' + buttons(c) + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' : '<p class="note">まだ誰にも推薦枠を出していません。</p>') +
+    '</section>';
+
     show(
       '<h2 class="section-title">新入生スカウト</h2>' +
-      '<p class="section-lead">高校3年生の有望選手を視察し、推薦枠を提示します。来るかどうかは秋の終わりに決まります。</p>' +
       '<div class="scoutbar">' +
         '<span>視察できる回数 <b>' + sc.points + '</b> / ' + Scouting.POINTS + '</span>' +
         '<span>推薦枠 <b>' + sc.offers + '</b> / ' + CONFIG.ROSTER.REC_SLOTS + '</span>' +
         '<span>特待生 <b>' + (sc.special ? 1 : 0) + '</b> / 1</span>' +
         '<span>大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
       '</div>' +
-      '<p class="note">情報は視察するほど確かになります（「？」は見立てに自信がないもの）。強い選手ほど他大学・プロ・社会人と取り合いになり、' +
-        'プロ志望の選手はドラフトで指名されればプロへ進みます。大学の評価（プロ輩出・全国大会・リーグ優勝・最近の成績）が高いほど選ばれやすくなります。</p>' +
+      pickedHtml +
+      '<h3 class="sub">候補の選手（' + sc.cands.length + '人）</h3>' +
       '<div class="scoutlist">' + sc.cands.map(card).join('') + '</div>' +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="s-done">スカウトを終えて秋リーグへ</button></div>',
       (root) => {
-        on(root, '[data-look]', (b) => h.look(b.dataset.look));
-        on(root, '[data-offer]', (b) => h.offer(b.dataset.offer));
-        on(root, '[data-special]', (b) => h.special(b.dataset.special));
+        on(root, '[data-look]', (b) => h.look(b.dataset.look, b));
+        on(root, '[data-offer]', (b) => h.offer(b.dataset.offer, b));
+        on(root, '[data-special]', (b) => h.special(b.dataset.special, b));
         on(root, '#s-done', h.done);
       });
   }
@@ -700,7 +745,7 @@ const CS = (() => {
   }
 
   return {
-    show, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
+    show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
     disband, proChoice, saveBox, dateText, bracket,
   };

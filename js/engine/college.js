@@ -166,6 +166,60 @@ const College = (() => {
     t.rotation = view.rotation.slice().concat(rest);
   }
 
+  /* ---------- 投手のスタミナ（カードをまたいだ持ち越し） ----------
+     大学野球はカードが土・日・月と続くので、1戦目に完投したエースは
+     2戦目には消耗が残り、3戦目ならほぼ戻っている、という塩梅にしてある。
+     ・pstam：残りスタミナ（0〜100%）。投げた打者の数だけ減る。スタミナの能力が高いほど減りにくい
+     ・1日ごとに回復し、カードが変わる（翌週になる）と全快する
+     ・試合の中では、強奪高校野球の「スタミナの持ち越し（staminaCarry）」として効く。
+       消耗が残ったまま登板すると、早い回から球威と制球が落ちる */
+  const STAM = { RECOVER: 34, RESTED: 85 };
+
+  /** 打者1人あたりに減る残りスタミナ（%）。スタミナ50で完投（35人）すると約75%減る */
+  function pitchCost(p) { return 2.7 - (p.stamina || 50) / 100 * 1.1; }
+
+  function pstamOf(p) { return p.pstam == null ? 100 : p.pstam; }
+
+  /** 残りスタミナを、試合の計算で使う「持ち越し」に写す */
+  function syncCarry(p) {
+    p.staminaCarry = (1 - pstamOf(p) / 100) * (Sim.capacityOf(p) + 58);
+  }
+
+  /** 試合中の残りスタミナ（%）。bf はこの試合で受けた打者の数 */
+  function liveStamina(p, bf) {
+    return Math.max(0, pstamOf(p) - (bf || 0) * pitchCost(p));
+  }
+
+  /** 投げたぶん減らす（試合のあと） */
+  function tirePitchers(team) {
+    (team.pitchers || []).forEach((p) => {
+      const bf = (p.game && p.game.bf) || 0;
+      if (bf > 0) p.pstam = Math.max(0, Math.round(pstamOf(p) - bf * pitchCost(p)));
+      syncCarry(p);
+    });
+  }
+
+  /** 1日ぶん回復する。full なら全快（カードが変わったとき） */
+  function recoverPitchers(team, full) {
+    (team.pitchers || []).forEach((p) => {
+      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 10));
+      syncCarry(p);
+    });
+  }
+
+  /**
+   * 相手（自分では選ばないチーム）の先発を決める。
+   * 疲れの抜けた投手の中でいちばん良い投手。エースが休んでいれば2番手が投げる
+   */
+  function pickRestedStarter(team) {
+    const list = (team.rotation || []).map((id) => Team.find(team, id)).filter(Boolean);
+    if (!list.length) return;
+    const ok = list.filter((p) => pstamOf(p) >= STAM.RESTED);
+    const pool = ok.length ? ok : list.slice().sort((a, b) => pstamOf(b) - pstamOf(a)).slice(0, 1);
+    const best = pool.slice().sort((a, b) => Player.rating(b) - Player.rating(a))[0];
+    team.rotation = [best.id].concat(team.rotation.filter((id) => id !== best.id));
+  }
+
   /* ---------- 調子と疲労 ---------- */
 
   /** チームの雰囲気（0〜100）。キャプテンの統率で少し底上げされる */
@@ -197,7 +251,7 @@ const College = (() => {
   function postGame(state, view, ctx) {
     const report = Growth.afterGame(view, ctx);
     Growth.commitStats(view);
-    Team.restPitchers(view);
+    tirePitchers(view);
     const injuries = [];
     const playedIds = new Set();
     Team.all(view).forEach((p) => {
@@ -250,6 +304,7 @@ const College = (() => {
     Team.all(state.team).forEach((p) => {
       p.fatigue = Math.max(0, (p.fatigue || 0) - (amount || 40));
       p.staminaCarry = 0;
+      p.pstam = 100;
       if (p.suspend && p.suspend.practiceBan > 0) p.suspend.practiceBan--;
       cleanSuspend(state, p);
     });
@@ -462,5 +517,6 @@ const College = (() => {
     eligible, suspended, injured, statusText, matchTeam, syncBack, preGame, postGame, rest, trainView,
     addHist, termLabel, seasonStart, seasonEnd, retiring, farewell, decidePaths, graduate, need, enroll,
     generalSets, check, strength, careerPath, moraleBonus,
+    tirePitchers, recoverPitchers, pickRestedStarter, pstamOf, liveStamina, STAM,
   };
 })();

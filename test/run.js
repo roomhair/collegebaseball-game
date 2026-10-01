@@ -328,6 +328,35 @@ section('同じ部の大学：部員を保存し、年をまたいで同じ選�
   void oppIds;
 }
 
+/* ---------- 投手のスタミナ ---------- */
+section('投手のスタミナ：1戦目に投げたエースは2戦目に消耗が残り、3戦目には戻る');
+{
+  const t = Universities.makeRoster('me', 52), o = Universities.makeRoster('op', 52);
+  const ace = Team.find(t, t.rotation[0]);
+  College.recoverPitchers(t, true);
+  G.Sim.play(t, o, { maxInnings: 12, manual: 'away' });
+  const bf = ace.game.bf;
+  College.tirePitchers(t);
+  ok(ace.pstam < 50, '完投（' + bf + '人）すると残りスタミナが大きく減る（' + ace.pstam + '%）');
+  College.recoverPitchers(t, false);
+  ok(ace.pstam >= 50 && ace.pstam < 85, '2戦目の朝は消耗が残る（' + ace.pstam + '%）');
+  College.recoverPitchers(t, false);
+  ok(ace.pstam >= 90, '3戦目の朝はほぼ回復（' + ace.pstam + '%）');
+  ace.pstam = 40;
+  College.recoverPitchers(t, true);
+  ok(ace.pstam === 100, 'カードが変わると全快');
+  ace.pstam = 30; Team.all(t).forEach((p) => { if (p.kind === 'pitcher' && p !== ace) p.pstam = 100; });
+  College.pickRestedStarter(t);
+  ok(t.rotation[0] !== ace.id, '相手チームは消耗した投手を先発させない');
+  ok(/残り30%/.test(Team.staminaLabel(ace)), 'スタミナの表示に残り%が出る（' + Team.staminaLabel(ace) + '）');
+  /* 実際の試合の流れでも、カードの中で持ち越される */
+  const { s, A } = newState();
+  runUntil(s, A, (x) => x.phase === 'SPRING_LEAGUE' && x.step === 'pregame', 2000);
+  Engine.autoGame(s);
+  const used = s.team.pitchers.filter((p) => p.pstam < 100);
+  ok(used.length >= 1, '試合で投げた投手の残りスタミナが減る');
+}
+
 /* ---------- 大学名変更で履歴が壊れない ---------- */
 section('名前の変更：大学名・選手名を変えても履歴は壊れない');
 {

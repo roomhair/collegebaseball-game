@@ -247,12 +247,36 @@ const Engine = (() => {
       state.opponent.__oppId = oppId;
     }
     state.opponent.name = oppName;
+    /* 1試合＝1日。投手のスタミナを回復させる（カードの1戦目・大会の初戦は全快） */
+    let dayKey, full;
+    if (kind === 'national') {
+      const nat = state.national;
+      dayKey = 'nat-' + nat.year + nat.term + '-' + nat.round + '-' + (state.lastResult && state.lastResult.replay ? 'r' : '');
+      full = nat.round === 0 && !(state.lastResult && state.lastResult.replay);
+    } else {
+      const card = currentCard(state);
+      dayKey = card.key + '#' + card.games.length + '@' + state.seasonSeq;
+      full = card.games.length === 0;
+    }
+    restDay(state, dayKey, full);
     state.match = { kind, oppId, oppName, label, big, noCold, maxInnings,
                     mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);
     College.syncBack(state, view);
     state.step = 'pregame';
     return true;
+  }
+
+  /**
+   * 試合の日の朝。両チームの投手を1日ぶん回復させ、相手は疲れの抜けた投手を先発させる。
+   * 同じ日に2回呼ばれても二重に回復しないよう、日の目印（key）で見分ける
+   */
+  function restDay(state, key, full) {
+    if (state.lastRestKey === key) return;
+    state.lastRestKey = key;
+    College.recoverPitchers(state.team, full);
+    College.recoverPitchers(state.opponent, full);
+    College.pickRestedStarter(state.opponent);
   }
 
   /** 試合をする前の最後の準備。試合に出るチーム（view）を返す */
@@ -279,12 +303,17 @@ const Engine = (() => {
 
   /** 結果だけ出す（おまかせ）。テストもこれで回す */
   function autoGame(state) {
+    /* おまかせのときは、自校も疲れの抜けた投手を先発させる */
+    const v0 = College.matchTeam(state);
+    College.pickRestedStarter(v0);
+    College.syncBack(state, v0);
     const view = beginGame(state);
     const g = state.liveGame;
     const away = g.mySide === 'away' ? view : state.opponent;
     const home = g.mySide === 'away' ? state.opponent : view;
     RNG.seed(g.seed);
-    const res = Sim.play(away, home, simOpts(state));
+    /* おまかせは継投もおまかせ（疲れたら相手と同じように投手を代える） */
+    const res = Sim.play(away, home, Object.assign(simOpts(state), { manual: null }));
     RNG.unseed();
     return Object.assign(afterGame(state, res, view), { view });
   }
@@ -321,8 +350,8 @@ const Engine = (() => {
       }));
     }
     Growth.commitStats(state.opponent);
+    College.tirePitchers(state.opponent);
     if (rival) {
-      Team.restPitchers(state.opponent);
       Team.all(state.opponent).forEach((p) => { p.formBias = 0; });
       /* 保存・読み込みで別の物になっていても、ここで部員の側へ書き戻す */
       state.rosters[m.oppId] = state.opponent;
@@ -424,7 +453,8 @@ const Engine = (() => {
 
   /** カードの結果画面を見たあと。次の節か、リーグ戦の終わりか */
   function nextCard(state) {
-    if (/_PLAYOFF$/.test(state.phase)) { afterPlayoff(state); return; }
+    /* 入れ替え戦が終わったら、まず結果（昇格・残留・降格）を見せる */
+    if (/_PLAYOFF$/.test(state.phase)) { state.step = 'playoffResult'; return; }
     League.nextRound(state.season);
     state.opponent = null;
     state.match = null;
@@ -493,6 +523,22 @@ const Engine = (() => {
       if (card && !card.done) { state.step = 'round'; return; }
     }
     afterPlayoff(state);
+  }
+
+  /** 入れ替え戦の結果の画面を見たあと */
+  function finishPlayoff(state) { afterPlayoff(state); }
+
+  /** 入れ替え戦の自分の結果（画面用）。{ won, upper, from, to, result } */
+  function playoffOutcome(state) {
+    const c = (state.playoffs || []).find((x) => x.a === state.userUni || x.b === state.userUni);
+    if (!c || !c.done) return null;
+    const won = c.winner === state.userUni, upper = c.upper === state.userUni;
+    const result = upper ? (won ? '残留' : '降格') : (won ? '昇格' : '昇格ならず');
+    const from = upper ? c.upperDiv : c.upperDiv + 1;
+    const to = (upper && !won) ? c.upperDiv + 1 : (!upper && won) ? c.upperDiv : from;
+    return { card: c, won, upper, from, to, result,
+             w: c.a === state.userUni ? c.winsA : c.winsB, l: c.a === state.userUni ? c.winsB : c.winsA, d: c.draws,
+             opp: upper ? c.lower : c.upper };
   }
 
   /** 入れ替え戦が終わったら、来季の所属を決めてシーズンの記録を残す */
@@ -730,11 +776,11 @@ const Engine = (() => {
   }
 
   return {
-    PHASE_LABEL, newGame, pickCreation, finishCreation, setCaptain,
+    PHASE_LABEL, restDay, newGame, pickCreation, finishCreation, setCaptain,
     toTraining, startTraining, trainTake, trainPass, endTraining,
     queue, pendingTop, answerPending,
     startLeague, currentCard, prepareMatch, matchView, beginGame, autoGame, afterGame, simOpts,
-    nextAfterGame, nextCard, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
+    nextAfterGame, nextCard, finishPlayoff, playoffOutcome, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
     startScouting, endScouting, startRetirement, endRetirement, startNewMember, pickGeneral, finishNewMember,
     chooseProEntry, check, header, uniName, leagueName, levelOf, clone,
   };
