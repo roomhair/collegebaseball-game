@@ -252,9 +252,24 @@ const Incidents = (() => {
       const p = pickPlayer(state, (q) => (q.growthRate || 50) >= 55 && Player.rating(q) < (q.potential || 99) - 4);
       if (!p) return null;
       const keys = p.kind === 'pitcher' ? ['control', 'stamina'] : RNG.shuffle(['meet', 'power', 'speed', 'arm', 'field', 'catch']).slice(0, 2);
-      const ups = keys.map((k) => { const b = p[k]; p[k] = RNG.stat(b + RNG.range(3, 6)); return k === 'control' ? '制球' : k === 'stamina' ? 'スタミナ' : ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩力', field: '守備', catch: '捕球' })[k]; });
-      if (p.kind === 'pitcher' && RNG.chance(0.5)) p.velo = Math.min(160, p.velo + RNG.range(1, 3));
-      ev.text = p.name + '（' + p.grade + '年）の練習の成果が一気に表れた。' + ups.join('・') + 'が伸びた。';
+      const NM = { control: '制球', stamina: 'スタミナ', meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩力', field: '守備', catch: '捕球' };
+      /* 「元がいくつで、いくつ伸びて、いくつになったか」を残す（画面に出す） */
+      const ups = keys.map((k) => {
+        const b = p[k];
+        p[k] = RNG.stat(b + RNG.range(3, 6));
+        return { label: NM[k], before: b, after: p[k] };
+      });
+      if (p.kind === 'pitcher' && RNG.chance(0.5)) {
+        const vb = p.velo;
+        p.velo = Math.min(160, p.velo + RNG.range(1, 3));
+        if (p.velo > vb) ups.push({ label: '球速', before: vb, after: p.velo, unit: 'km/h' });
+      }
+      const fmt = (u) => u.unit
+        ? u.label + ' ' + u.before + '→' + u.after + u.unit + '（+' + (u.after - u.before) + '）'
+        : u.label + ' ' + rankOf(u.before) + u.before + '→' + rankOf(u.after) + u.after + '（+' + (u.after - u.before) + '）';
+      ev.text = p.name + '（' + p.grade + '年）の練習の成果が一気に表れた。';
+      ev.ups = ups;
+      ev.lines = ups.map(fmt);
       College.addHist(p, state, C(state) + ' 急成長');
       return ev;
     }

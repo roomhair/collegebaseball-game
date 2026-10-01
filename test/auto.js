@@ -58,6 +58,7 @@ function makeAuto(G, policy) {
         if (st === 'verdict' || st === 'growth' || st === 'result') { E.nextAfterGame(state); return true; }
         if (st === 'cardEnd') { E.nextCard(state); return true; }
         if (st === 'final') { E.afterFinal(state); return true; }
+        if (st === 'playoffResult') { E.finishPlayoff(state); return true; }
         if (st === 'end') { E.closeSeason(state); return true; }
         break;
       case 'SCOUTING': {

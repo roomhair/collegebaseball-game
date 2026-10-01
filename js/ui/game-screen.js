@@ -150,7 +150,10 @@ const GameScreen = (() => {
     const cap = Sim.capacityOf(p);
     const limit = cap + 18;
     const faced = Math.max(0, (p.staminaCarry || 0) + (bf || 0));
-    const left = Math.max(0, Math.min(1, 1 - faced / limit));
+    /* 大学版：残りスタミナ（%）があればそちらで出す（試合前の画面と同じ数字になる） */
+    const left = p.pstam != null && typeof College !== 'undefined'
+      ? College.liveStamina(p, bf) / 100
+      : Math.max(0, Math.min(1, 1 - faced / limit));
     const worn = faced > cap + 9 ? ' is-low' : (faced > cap ? ' is-mid' : '');
     return '<div class="ll__p">' +
       '<span class="ll__pname">投手　' +

@@ -80,7 +80,8 @@ const App = (() => {
     if (state.mode === 'college' && state.team) {
       try { Engine.check(state); } catch (e) { console.error(e); }
     }
-    if ((state.pending || []).length && GAME_STEPS.indexOf(state.step) < 0) { showPending(); return; }
+    /* 不祥事・出来事はカードとカードのあいだ（次の節の画面に入る前）に出す */
+    if ((state.pending || []).length && GAME_STEPS.indexOf(state.step) < 0 && state.step !== 'cardEnd') { showPending(); return; }
     if (state.mode === 'soccer') { renderSoccer(); return; }
     if (state.mode === 'pro') { renderPro(); return; }
     renderCollege();
@@ -145,17 +146,35 @@ const App = (() => {
     if (/_LEAGUE$|_PLAYOFF$|_NATIONAL$/.test(ph)) { renderMatchPhase(); return; }
     if (ph === 'SCOUTING') {
       const sc = state.scouting;
+      /* 押したボタンが画面の同じ位置に残るよう、描き直したあとに位置を合わせる
+         （一番上まで戻されないように） */
+      const keep = (fn) => (id, btn) => {
+        const sel = btn && btn.closest('.scoutpick__i') ? '.scoutpick__i' : '.scout';
+        const anchor = btn ? btn.getBoundingClientRect().top : null;
+        const y = window.scrollY;
+        fn(id);
+        save();
+        render();
+        window.scrollTo(0, y);
+        if (anchor != null) {
+          /* 同じ選手の同じ場所（上のまとめ／候補の一覧）のボタンを探して、ずれたぶんだけ戻す */
+          const card = document.querySelector('.scoutlist [data-cid="' + id + '"]');
+          const target = sel === '.scoutpick__i'
+            ? (document.querySelector('.scoutpick [data-offer="' + id + '"]') || (card && card.querySelector('[data-offer]')))
+            : (card && card.querySelector('[data-offer]'));
+          if (target) window.scrollBy(0, target.getBoundingClientRect().top - anchor);
+        }
+      };
       CS.scouting(state, {
-        look: after((id) => { if (!Scouting.look(sc, id)) toast('これ以上視察できません'); }),
-        offer: after((id) => { if (!Scouting.toggleOffer(sc, id)) toast('推薦枠は' + CONFIG.ROSTER.REC_SLOTS + 'つまでです'); }),
-        special: after((id) => Scouting.toggleSpecial(sc, id)),
+        look: keep((id) => { if (!Scouting.look(sc, id)) toast('これ以上視察できません'); }),
+        offer: keep((id) => { if (!Scouting.toggleOffer(sc, id)) toast('推薦枠は' + CONFIG.ROSTER.REC_SLOTS + 'つまでです'); }),
+        special: keep((id) => Scouting.toggleSpecial(sc, id)),
         done: () => {
           const go = after(() => Engine.endScouting(state));
           if (sc.offers === 0) UI.confirmBox({ title: '推薦枠を出していません', body: '誰にも推薦枠を出さずに終えると、来年の新入生は一般入部だけになります。よろしいですか？', yes: 'このまま終える' }, go);
           else go();
         },
       });
-      window.scrollTo(0, 0);
       return;
     }
     if (ph === 'RETIREMENT') { CS.retirement(state, { next: after(() => Engine.endRetirement(state)) }); return; }
@@ -194,6 +213,7 @@ const App = (() => {
     }
     if (st === 'cardEnd') { CS.cardEnd(state, { next: after(() => Engine.nextCard(state)) }); return; }
     if (st === 'final') { CS.final(state, { next: after(() => Engine.afterFinal(state)) }); return; }
+    if (st === 'playoffResult') { CS.playoffResult(state, { next: after(() => Engine.finishPlayoff(state)) }); return; }
     if (st === 'end') { CS.nationalEnd(state, { next: after(() => Engine.closeSeason(state)) }); return; }
     renderGameStep();
     void ph;
@@ -217,11 +237,7 @@ const App = (() => {
     if (m.kind === 'league' || m.kind === 'playoff') {
       const c = Engine.currentCard(state);
       const mineA = c.a === state.userUni;
-      extra = '<p class="note">このカード ' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '（2勝先取）。リーグ戦は12回で引き分け。延長10回からタイブレーク（無死一、二塁）。</p>';
-    } else if (m.kind === 'national') {
-      extra = '<p class="note">トーナメント。コールドなし。延長10回からタイブレーク（無死一、二塁）。</p>';
-    } else if (m.kind === 'pro') {
-      extra = '<p class="note">プロの公式戦。12回で引き分け。延長10回からタイブレーク。</p>';
+      extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
     Screens.pregame(state, { view, extra });
   }

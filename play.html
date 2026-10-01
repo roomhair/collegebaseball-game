@@ -1342,6 +1342,8 @@ body { background: var(--bg); color: var(--ink); }
   .slots { grid-template-columns: 1fr; }
 }
 [hidden] { display: none !important; }
+/* 強奪高校野球では最上級生（3年）を太字にしていた。大学では学年の数字はそろえる */
+.g3 { font-weight: inherit; }
 @media (max-width: 440px) {
   .appbar__title { font-size: 15px; letter-spacing: .08em; }
   .appbar__btn span { display: none; }
@@ -1349,6 +1351,18 @@ body { background: var(--bg); color: var(--ink); }
 .unibtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
 .unibtns small { color: var(--ink-mute); font-weight: 400; }
 .bootnote { grid-column: 1 / -1; border: 1.5px dashed var(--ng); padding: 12px 14px; font-size: 14px; line-height: 1.7; color: var(--ink); background: var(--panel); margin: 0; }
+.cardstat { margin: 0 0 8px; font-size: 15px; }
+.poresult__title { font-size: 34px; }
+.scout__hs { margin: 0; font-size: 13px; }
+.scoutpick { border: 1.5px solid var(--accent); background: var(--panel); padding: 10px 12px; margin: 10px 0 14px; }
+.scoutpick .sub { margin-top: 0; }
+.scoutpick__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.scoutpick__i { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; border-bottom: 1px solid var(--line-soft); padding: 6px 0; font-size: 13px; }
+.scoutpick__i.is-special { background: var(--navy-soft); }
+.scoutpick__nm { min-width: 12em; }
+.scoutpick__ab { color: var(--ink-mute); flex: 1 1 260px; min-width: 0; }
+.scoutpick__feel { color: var(--navy); font-weight: 700; }
+.scoutpick__btns { display: flex; gap: 6px; flex-wrap: wrap; }
 
 </style>
 </head>
@@ -1649,7 +1663,9 @@ const CONFIG = {
      中身の式は強奪高校野球の growth.js のまま */
   GROWTH: {
     PER_GAME_BAT: 11.0 * 0.30,
-    PER_GAME_PIT: 6.9 * 0.30,
+    /* 投手は1カード3試合を2〜3人で回すようになったので（スタミナの持ち越し）、
+       1人が1試合で伸びる幅を野手より大きくしてある */
+    PER_GAME_PIT: 6.9 * 0.30 * 1.9,
     MAX_STEP: 4,
     HEAD_SPAN: 22,
     HEAD_CURVE: 1.9,
@@ -2018,7 +2034,7 @@ const NAMES = (() => {
   /** 高校名（スカウト候補の出身校）。甲子園常連なら強豪校の表から */
   function highSchool(strong) {
     const n = (strong && Math.random() < 0.6) ? pick(NATIONAL_SCHOOLS) : pick(LOCAL_HEAD) + pick(LOCAL_TAIL);
-    return /(高校|学園|学院|附属|義塾|学苑|学館|舘)$/.test(n) ? n + '高' : n + '高校';
+    return /高校$/.test(n) ? n : n + '高校';
   }
 
 
@@ -2695,7 +2711,7 @@ const Team = (() => {
 
   /** 大会と大会のあいだ、オフシーズンでは抜けきる */
   function healPitchers(team) {
-    team.pitchers.forEach((p) => { p.staminaCarry = 0; });
+    team.pitchers.forEach((p) => { p.staminaCarry = 0; if (p.pstam != null) p.pstam = 100; });
   }
 
   /** 持ち越したスタミナの消耗が、今日の試合の目盛りの何割にあたるか */
@@ -2706,12 +2722,18 @@ const Team = (() => {
 
   /** スタミナの残り具合の色分け（3段階） */
   function staminaTier(p) {
-    const f = staminaCarryFrac(p);
+    const f = p.pstam != null ? 1 - p.pstam / 100 : staminaCarryFrac(p);
     return f >= 0.70 ? 'hi' : (f >= 0.40 ? 'mid' : 'lo');
   }
 
   /** スタミナの残り具合の見せ方（4段階） */
   function staminaLabel(p) {
+    /* 大学版：残りスタミナ（%）を持っているときは、それも添える */
+    if (p.pstam != null) {
+      const f2 = 1 - p.pstam / 100;
+      const w = f2 >= 0.70 ? '消耗大' : f2 >= 0.40 ? 'やや消耗' : f2 >= 0.18 ? '軽い消耗' : '万全';
+      return w + '（残り' + Math.round(p.pstam) + '%）';
+    }
     const f = staminaCarryFrac(p);
     if (f >= 0.70) return '消耗大';
     if (f >= 0.40) return 'やや消耗';
@@ -4516,62 +4538,110 @@ const Persona = (() => {
   const EPISODES = {
     serious: [
       '練習後、毎日最後までグラウンドに残っていたらしい',
-      '練習ノートを3年間1日も欠かさずつけていたという',
+      '練習ノートを3年間1日も欠かさずつけていたという。最後のページには「まだ足りない」とだけ書いてあった',
       '雨の日も一人で室内練習場の掃除をしていたらしい',
       '寮の門限を一度も破ったことがないと監督が話していた',
+      '修学旅行先のホテルの駐車場で、素振りをしていて警備員に声をかけられたらしい',
+      '監督が「あいつは手がかからなすぎて逆に心配になる」と笑っていた',
+      'グラウンドの石を拾いすぎて、ベンチ裏に小さな石の山ができていたという',
     ],
     passionate: [
       '県大会の決勝で、周囲が緊張している中でも率先して声を出していた',
       '負けた試合のあと、誰よりも悔しがって泣いていたという',
       '練習試合でも全力疾走を欠かさず、相手校の監督から褒められたらしい',
+      '声を出しすぎて、大会期間中ずっと声が枯れていたという',
+      '逆転負けの夜、チーム全員を集めて「明日から変わろう」と演説したらしい',
+      '応援団より声が大きいと、地元の新聞に書かれたことがある',
     ],
     calm: [
       '大量リードされた場面でも表情ひとつ変えなかったという',
       'ピンチでマウンドに集まると、いつも最初に作戦を口にしていた',
       '記者の質問に淡々と、的確に答えていたらしい',
+      'サヨナラ打を打った直後も、一礼してからゆっくりベンチに戻ったという',
+      '試合中に落雷で中断した時も、一人だけベンチで詰将棋を解いていたらしい',
+      '相手の監督のサインを、表情だけで見抜いたことがあるという噂がある',
     ],
     caring: [
       '練習中、後輩のミスを誰よりも早くフォローしていた',
       '試合に出られない同級生のために、毎日ノックを手伝っていたらしい',
       '新入部員の名前を入部初日に全員覚えていたという',
+      'ケガで離脱した仲間の家に、毎日その日の練習メニューを届けていたらしい',
+      'マネージャーより先に、部員全員の誕生日を把握していたという',
+      '相手チームの選手がケガをした時、真っ先に駆け寄って肩を貸していた',
     ],
     jokester: [
       'ベンチのムードメーカーで、負けている試合でも笑いを取っていたらしい',
       '寮でいたずらをして先輩に怒られたことが何度かあるという',
       '取材のカメラを見つけると、すぐにポーズを取っていたらしい',
+      '監督のモノマネが似すぎていて、本人の前でやらされたことがあるという',
+      '大事な試合の前日に、チーム全員分のおにぎりを作って全部塩を入れ忘れたらしい',
+      '「打ったら坊主にする」と宣言してホームランを打ち、本当に坊主にした',
+      'ヒーローインタビューで緊張のあまり、自分の名前を噛んだことで有名らしい',
     ],
     mypace: [
       '集合時間ぎりぎりに来ることが多いが、練習は黙々とこなしていたという',
       'チームの流行りには一切乗らず、自分の調整法を貫いていたらしい',
       '試合前でもいつも通り昼寝をしていたと同級生が話していた',
+      '決勝戦の前夜、一人で星を見ていたら寝落ちして朝露に濡れて帰ってきたらしい',
+      '練習中に珍しい鳥を見つけて、ノックの球を見送ったことがあるという',
+      'スパイクの紐を結ぶのに毎回5分かかる。本人いわく「儀式」らしい',
     ],
     lone: [
       'チームの輪から少し離れて、一人でバットを振っていることが多かったという',
       '試合に負けた後、監督に何も言わず一人でグラウンド整備をしていた',
       '仲間と出かけることはほとんどなく、休日も一人で練習していたらしい',
+      '深夜のグラウンドで、誰もいないのにノックの音がしていたという噂がある。翌朝そこにいたのは彼だけだった',
+      '集合写真には、いつも少し離れた場所に写っているらしい',
+      '誰とも話さずに打撃練習を終え、帰り際に一言「明日も来る」とだけ言ったという',
     ],
     wild: [
       '寮で他の選手とトラブルになったことがあるらしい',
       '他校の選手と口論になり、試合後に呼び出されたことがあるという',
       '髪型のことで何度も指導を受けていたらしい',
       '練習をさぼって街に出ていたという噂がある',
+      '監督の車のタイヤの空気がよく抜けていた時期と、彼の反抗期が重なるらしい',
+      '練習試合で死球を受けた直後、マウンドへ向かって歩き出したところを3人がかりで止められたという',
+      '地元の夏祭りで、他校の生徒を相手に大立ち回りを演じたという話がある。真偽は不明',
     ],
     sensitive: [
       '大事な場面でエラーをした後、しばらく練習に出てこなかったらしい',
       '試合前は食事が喉を通らないほど緊張するという',
       '監督に叱られた翌日、誰よりも早く練習に来ていたらしい',
+      '観客席から聞こえたヤジを3年間ノートに書き留めていて、それを読み返すと打てるようになるという',
+      '負けた日の夜、寮の屋上で一人泣いていたのを後輩が見たらしい',
+      'お守りを12個持ち歩いている。1つでも忘れると、その日は打てないという',
     ],
     competitive: [
       '紅白戦で打ち取られた投手に、翌日もう一度勝負を挑んでいたという',
       'レギュラー争いに負けた日、夜遅くまで素振りをしていたらしい',
       'じゃんけんで負けても本気で悔しがるという',
+      '体育祭のリレーで負けて、翌日から陸上部の朝練に混ざり始めたらしい',
+      '自分を打ち取った投手の名前を、部屋の壁に貼っているという',
+      'ゲームで負けた相手に、勝つまで帰らせなかったという伝説がある',
     ],
     lazy: [
       '才能はあるのに、走り込みになると姿が見えなくなるらしい',
       '練習の手を抜いているように見えると、何度か注意されていたという',
       '試合の日だけは別人のように集中するという話もある',
+      'ランニング中に姿を消し、ゴール地点のベンチで寝ているのが見つかったことがある',
+      '「本気を出すのは大学から」と高校3年間言い続けていたらしい',
+      '筋トレの回数を数えるのは得意だが、実際にやった回数とは合わないらしい',
     ],
   };
+
+  /* 性格とは関係のない、その選手だけの小さな話。たまに混ぜる */
+  const ODD_EPISODES = [
+    '中学時代に打ったファウルボールが、今も近所の家の雨どいに挟まったままらしい',
+    '実家が定食屋で、試合の日は店に「本日〇〇出場」と貼り紙が出るという',
+    '小学生の頃、プロ野球選手に投げ方を褒められたのが今も自慢らしい',
+    '高校の部室に、彼が書いた「全国制覇」の色紙が今も飾られているという',
+    '大雪の日、グラウンドの雪かきを一人で終わらせて伝説になったらしい',
+    '投げたボールがカラスに当たり、それ以来カラスに追いかけられるようになったという',
+    '練習試合で、ホームランボールが隣の田んぼの持ち主の家に飛び込み、お礼に米をもらったらしい',
+    '祖母が全試合を観に来る。祖母の座る位置で、その日の調子が分かるらしい',
+    '高校の合宿所に出ると噂の「深夜のバット音」の正体は彼だった、と言われている',
+    '甲子園の土を持ち帰らず、代わりに相手ベンチ前の土を持ち帰ったという謎の逸話がある',
+  ];
 
   /* 評判。性格の種類を直接言わず、周囲の見立てとして出す */
   const RUMORS = {
@@ -4635,6 +4705,7 @@ const Persona = (() => {
 
   /** 性格に沿ったエピソードを1つ。2割は無関係の噂が混じる */
   function episode(type) {
+    if (RNG.chance(0.12)) return RNG.pick(ODD_EPISODES);
     const t = RNG.chance(0.8) ? type : RNG.pick(TYPE_KEYS);
     return RNG.pick(EPISODES[t]);
   }
@@ -5770,6 +5841,60 @@ const College = (() => {
     t.rotation = view.rotation.slice().concat(rest);
   }
 
+  /* ---------- 投手のスタミナ（カードをまたいだ持ち越し） ----------
+     大学野球はカードが土・日・月と続くので、1戦目に完投したエースは
+     2戦目には消耗が残り、3戦目ならほぼ戻っている、という塩梅にしてある。
+     ・pstam：残りスタミナ（0〜100%）。投げた打者の数だけ減る。スタミナの能力が高いほど減りにくい
+     ・1日ごとに回復し、カードが変わる（翌週になる）と全快する
+     ・試合の中では、強奪高校野球の「スタミナの持ち越し（staminaCarry）」として効く。
+       消耗が残ったまま登板すると、早い回から球威と制球が落ちる */
+  const STAM = { RECOVER: 34, RESTED: 85 };
+
+  /** 打者1人あたりに減る残りスタミナ（%）。スタミナ50で完投（35人）すると約75%減る */
+  function pitchCost(p) { return 2.7 - (p.stamina || 50) / 100 * 1.1; }
+
+  function pstamOf(p) { return p.pstam == null ? 100 : p.pstam; }
+
+  /** 残りスタミナを、試合の計算で使う「持ち越し」に写す */
+  function syncCarry(p) {
+    p.staminaCarry = (1 - pstamOf(p) / 100) * (Sim.capacityOf(p) + 58);
+  }
+
+  /** 試合中の残りスタミナ（%）。bf はこの試合で受けた打者の数 */
+  function liveStamina(p, bf) {
+    return Math.max(0, pstamOf(p) - (bf || 0) * pitchCost(p));
+  }
+
+  /** 投げたぶん減らす（試合のあと） */
+  function tirePitchers(team) {
+    (team.pitchers || []).forEach((p) => {
+      const bf = (p.game && p.game.bf) || 0;
+      if (bf > 0) p.pstam = Math.max(0, Math.round(pstamOf(p) - bf * pitchCost(p)));
+      syncCarry(p);
+    });
+  }
+
+  /** 1日ぶん回復する。full なら全快（カードが変わったとき） */
+  function recoverPitchers(team, full) {
+    (team.pitchers || []).forEach((p) => {
+      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 10));
+      syncCarry(p);
+    });
+  }
+
+  /**
+   * 相手（自分では選ばないチーム）の先発を決める。
+   * 疲れの抜けた投手の中でいちばん良い投手。エースが休んでいれば2番手が投げる
+   */
+  function pickRestedStarter(team) {
+    const list = (team.rotation || []).map((id) => Team.find(team, id)).filter(Boolean);
+    if (!list.length) return;
+    const ok = list.filter((p) => pstamOf(p) >= STAM.RESTED);
+    const pool = ok.length ? ok : list.slice().sort((a, b) => pstamOf(b) - pstamOf(a)).slice(0, 1);
+    const best = pool.slice().sort((a, b) => Player.rating(b) - Player.rating(a))[0];
+    team.rotation = [best.id].concat(team.rotation.filter((id) => id !== best.id));
+  }
+
   /* ---------- 調子と疲労 ---------- */
 
   /** チームの雰囲気（0〜100）。キャプテンの統率で少し底上げされる */
@@ -5801,7 +5926,7 @@ const College = (() => {
   function postGame(state, view, ctx) {
     const report = Growth.afterGame(view, ctx);
     Growth.commitStats(view);
-    Team.restPitchers(view);
+    tirePitchers(view);
     const injuries = [];
     const playedIds = new Set();
     Team.all(view).forEach((p) => {
@@ -5854,6 +5979,7 @@ const College = (() => {
     Team.all(state.team).forEach((p) => {
       p.fatigue = Math.max(0, (p.fatigue || 0) - (amount || 40));
       p.staminaCarry = 0;
+      p.pstam = 100;
       if (p.suspend && p.suspend.practiceBan > 0) p.suspend.practiceBan--;
       cleanSuspend(state, p);
     });
@@ -6066,6 +6192,7 @@ const College = (() => {
     eligible, suspended, injured, statusText, matchTeam, syncBack, preGame, postGame, rest, trainView,
     addHist, termLabel, seasonStart, seasonEnd, retiring, farewell, decidePaths, graduate, need, enroll,
     generalSets, check, strength, careerPath, moraleBonus,
+    tirePitchers, recoverPitchers, pickRestedStarter, pstamOf, liveStamina, STAM,
   };
 })();
 
@@ -6580,9 +6707,24 @@ const Incidents = (() => {
       const p = pickPlayer(state, (q) => (q.growthRate || 50) >= 55 && Player.rating(q) < (q.potential || 99) - 4);
       if (!p) return null;
       const keys = p.kind === 'pitcher' ? ['control', 'stamina'] : RNG.shuffle(['meet', 'power', 'speed', 'arm', 'field', 'catch']).slice(0, 2);
-      const ups = keys.map((k) => { const b = p[k]; p[k] = RNG.stat(b + RNG.range(3, 6)); return k === 'control' ? '制球' : k === 'stamina' ? 'スタミナ' : ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩力', field: '守備', catch: '捕球' })[k]; });
-      if (p.kind === 'pitcher' && RNG.chance(0.5)) p.velo = Math.min(160, p.velo + RNG.range(1, 3));
-      ev.text = p.name + '（' + p.grade + '年）の練習の成果が一気に表れた。' + ups.join('・') + 'が伸びた。';
+      const NM = { control: '制球', stamina: 'スタミナ', meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩力', field: '守備', catch: '捕球' };
+      /* 「元がいくつで、いくつ伸びて、いくつになったか」を残す（画面に出す） */
+      const ups = keys.map((k) => {
+        const b = p[k];
+        p[k] = RNG.stat(b + RNG.range(3, 6));
+        return { label: NM[k], before: b, after: p[k] };
+      });
+      if (p.kind === 'pitcher' && RNG.chance(0.5)) {
+        const vb = p.velo;
+        p.velo = Math.min(160, p.velo + RNG.range(1, 3));
+        if (p.velo > vb) ups.push({ label: '球速', before: vb, after: p.velo, unit: 'km/h' });
+      }
+      const fmt = (u) => u.unit
+        ? u.label + ' ' + u.before + '→' + u.after + u.unit + '（+' + (u.after - u.before) + '）'
+        : u.label + ' ' + rankOf(u.before) + u.before + '→' + rankOf(u.after) + u.after + '（+' + (u.after - u.before) + '）';
+      ev.text = p.name + '（' + p.grade + '年）の練習の成果が一気に表れた。';
+      ev.ups = ups;
+      ev.lines = ups.map(fmt);
       College.addHist(p, state, C(state) + ' 急成長');
       return ev;
     }
@@ -7573,6 +7715,8 @@ const Pro = (() => {
       state.opponent.__key = key;
     }
     state.opponent.name = teamName(state, oppId);
+    /* プロは毎日試合。1日ぶん回復し、相手は疲れの抜けた投手を先発させる */
+    Engine.restDay(state, 'pro-' + P.no + '-' + S.stage + '-' + S.day + '-' + (S.post ? S.post.games.length : 0), false);
     state.match = { kind: 'pro', oppId, oppName: teamName(state, oppId), label, big: S.stage !== 'regular',
                     noCold: true, maxInnings: 12, mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);
@@ -8098,12 +8242,36 @@ const Engine = (() => {
       state.opponent.__oppId = oppId;
     }
     state.opponent.name = oppName;
+    /* 1試合＝1日。投手のスタミナを回復させる（カードの1戦目・大会の初戦は全快） */
+    let dayKey, full;
+    if (kind === 'national') {
+      const nat = state.national;
+      dayKey = 'nat-' + nat.year + nat.term + '-' + nat.round + '-' + (state.lastResult && state.lastResult.replay ? 'r' : '');
+      full = nat.round === 0 && !(state.lastResult && state.lastResult.replay);
+    } else {
+      const card = currentCard(state);
+      dayKey = card.key + '#' + card.games.length + '@' + state.seasonSeq;
+      full = card.games.length === 0;
+    }
+    restDay(state, dayKey, full);
     state.match = { kind, oppId, oppName, label, big, noCold, maxInnings,
                     mySide: RNG.chance(0.5) ? 'home' : 'away' };
     const view = College.matchTeam(state);
     College.syncBack(state, view);
     state.step = 'pregame';
     return true;
+  }
+
+  /**
+   * 試合の日の朝。両チームの投手を1日ぶん回復させ、相手は疲れの抜けた投手を先発させる。
+   * 同じ日に2回呼ばれても二重に回復しないよう、日の目印（key）で見分ける
+   */
+  function restDay(state, key, full) {
+    if (state.lastRestKey === key) return;
+    state.lastRestKey = key;
+    College.recoverPitchers(state.team, full);
+    College.recoverPitchers(state.opponent, full);
+    College.pickRestedStarter(state.opponent);
   }
 
   /** 試合をする前の最後の準備。試合に出るチーム（view）を返す */
@@ -8130,12 +8298,17 @@ const Engine = (() => {
 
   /** 結果だけ出す（おまかせ）。テストもこれで回す */
   function autoGame(state) {
+    /* おまかせのときは、自校も疲れの抜けた投手を先発させる */
+    const v0 = College.matchTeam(state);
+    College.pickRestedStarter(v0);
+    College.syncBack(state, v0);
     const view = beginGame(state);
     const g = state.liveGame;
     const away = g.mySide === 'away' ? view : state.opponent;
     const home = g.mySide === 'away' ? state.opponent : view;
     RNG.seed(g.seed);
-    const res = Sim.play(away, home, simOpts(state));
+    /* おまかせは継投もおまかせ（疲れたら相手と同じように投手を代える） */
+    const res = Sim.play(away, home, Object.assign(simOpts(state), { manual: null }));
     RNG.unseed();
     return Object.assign(afterGame(state, res, view), { view });
   }
@@ -8172,8 +8345,8 @@ const Engine = (() => {
       }));
     }
     Growth.commitStats(state.opponent);
+    College.tirePitchers(state.opponent);
     if (rival) {
-      Team.restPitchers(state.opponent);
       Team.all(state.opponent).forEach((p) => { p.formBias = 0; });
       /* 保存・読み込みで別の物になっていても、ここで部員の側へ書き戻す */
       state.rosters[m.oppId] = state.opponent;
@@ -8275,7 +8448,8 @@ const Engine = (() => {
 
   /** カードの結果画面を見たあと。次の節か、リーグ戦の終わりか */
   function nextCard(state) {
-    if (/_PLAYOFF$/.test(state.phase)) { afterPlayoff(state); return; }
+    /* 入れ替え戦が終わったら、まず結果（昇格・残留・降格）を見せる */
+    if (/_PLAYOFF$/.test(state.phase)) { state.step = 'playoffResult'; return; }
     League.nextRound(state.season);
     state.opponent = null;
     state.match = null;
@@ -8344,6 +8518,22 @@ const Engine = (() => {
       if (card && !card.done) { state.step = 'round'; return; }
     }
     afterPlayoff(state);
+  }
+
+  /** 入れ替え戦の結果の画面を見たあと */
+  function finishPlayoff(state) { afterPlayoff(state); }
+
+  /** 入れ替え戦の自分の結果（画面用）。{ won, upper, from, to, result } */
+  function playoffOutcome(state) {
+    const c = (state.playoffs || []).find((x) => x.a === state.userUni || x.b === state.userUni);
+    if (!c || !c.done) return null;
+    const won = c.winner === state.userUni, upper = c.upper === state.userUni;
+    const result = upper ? (won ? '残留' : '降格') : (won ? '昇格' : '昇格ならず');
+    const from = upper ? c.upperDiv : c.upperDiv + 1;
+    const to = (upper && !won) ? c.upperDiv + 1 : (!upper && won) ? c.upperDiv : from;
+    return { card: c, won, upper, from, to, result,
+             w: c.a === state.userUni ? c.winsA : c.winsB, l: c.a === state.userUni ? c.winsB : c.winsA, d: c.draws,
+             opp: upper ? c.lower : c.upper };
   }
 
   /** 入れ替え戦が終わったら、来季の所属を決めてシーズンの記録を残す */
@@ -8581,11 +8771,11 @@ const Engine = (() => {
   }
 
   return {
-    PHASE_LABEL, newGame, pickCreation, finishCreation, setCaptain,
+    PHASE_LABEL, restDay, newGame, pickCreation, finishCreation, setCaptain,
     toTraining, startTraining, trainTake, trainPass, endTraining,
     queue, pendingTop, answerPending,
     startLeague, currentCard, prepareMatch, matchView, beginGame, autoGame, afterGame, simOpts,
-    nextAfterGame, nextCard, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
+    nextAfterGame, nextCard, finishPlayoff, playoffOutcome, finishLeague, afterFinal, afterPlayoff, startNational, closeSeason, goNext,
     startScouting, endScouting, startRetirement, endRetirement, startNewMember, pickGeneral, finishNewMember,
     chooseProEntry, check, header, uniName, leagueName, levelOf, clone,
   };
@@ -10233,7 +10423,7 @@ const Screens = (() => {
     let lead = '';
     if (r.card) {
       lead = 'このカード　' + r.card.w + '勝' + r.card.l + '敗' + (r.card.d ? r.card.d + '分' : '') +
-        (r.card.done ? (r.card.won ? '　カードを取った（勝ち点1）' : '　カードを落とした') : '　（2勝先取。まだ続く）');
+        (r.card.done ? (r.kind === 'playoff' ? '' : (r.card.won ? '　勝ち点を獲得' : '　勝ち点を落とした')) : '');
     } else if (r.kind === 'national') {
       lead = r.replay ? '引き分け。再試合になる。' : (r.win ? (r.last ? '優勝！' : '次の回へ進む。') : 'ここで敗退。');
     }
@@ -10499,7 +10689,10 @@ const GameScreen = (() => {
     const cap = Sim.capacityOf(p);
     const limit = cap + 18;
     const faced = Math.max(0, (p.staminaCarry || 0) + (bf || 0));
-    const left = Math.max(0, Math.min(1, 1 - faced / limit));
+    /* 大学版：残りスタミナ（%）があればそちらで出す（試合前の画面と同じ数字になる） */
+    const left = p.pstam != null && typeof College !== 'undefined'
+      ? College.liveStamina(p, bf) / 100
+      : Math.max(0, Math.min(1, 1 - faced / limit));
     const worn = faced > cap + 9 ? ' is-low' : (faced > cap ? ' is-mid' : '');
     return '<div class="ll__p">' +
       '<span class="ll__pname">投手　' +
@@ -11450,12 +11643,11 @@ const CS = (() => {
 
   function cardLine(state, c) {
     const g = c.games.map((x) => x.a + '-' + x.b + (x.inn > 9 ? '<small>(' + x.inn + ')</small>' : '')).join('　');
-    const res = c.done ? '決着' : '';
     return '<li class="cardline' + (c.a === state.userUni || c.b === state.userUni ? ' is-me' : '') + '">' +
       '<span class="cardline__t">' + esc(uni(state, c.a)) + ' <b>' + c.winsA + '</b> - <b>' + c.winsB + '</b> ' + esc(uni(state, c.b)) +
       (c.draws ? '<small>（' + c.draws + '分）</small>' : '') + '</span>' +
       '<span class="cardline__g">' + g + '</span>' +
-      (c.done ? '<span class="cardline__w">' + res + ' 勝ち点 → ' + esc(uni(state, c.winner)) + '</span>' : '') + '</li>';
+      (c.done ? '<span class="cardline__w">' + (String(c.div).charAt(0) === 'p' ? '勝者 → ' : '勝ち点 → ') + esc(uni(state, c.winner)) + '</span>' : '') + '</li>';
   }
 
   /* ---------- リーグ戦の節 ---------- */
@@ -11472,15 +11664,16 @@ const CS = (() => {
       ? '入れ替え戦　' + card.upperDiv + '部・' + (card.upperDiv + 1) + '部'
       : Engine.leagueName(state) + '　第' + (se.round + 1) + '節';
     const lead = isPO
-      ? (card.upper === state.userUni ? card.upperDiv + '部残留をかけて、' + (card.upperDiv + 1) + '部優勝校と戦う。2勝した側が来季' + card.upperDiv + '部。' : card.upperDiv + '部昇格をかけて、' + card.upperDiv + '部最下位校と戦う。2勝した側が来季' + card.upperDiv + '部。')
-      : '対戦は2勝先取。引き分けは数えず、どちらかが2勝するまで続く。カードを取ると勝ち点1。';
+      ? (card.upper === state.userUni ? card.upperDiv + '部残留をかけた戦い' : card.upperDiv + '部昇格をかけた戦い')
+      : '';
+    const w = mineA ? card.winsA : card.winsB, l = mineA ? card.winsB : card.winsA;
     show(
       '<h2 class="section-title">' + esc(title) + '</h2>' +
       '<div class="vsbox">' +
         '<p class="vsbox__vs">' + esc(state.team.name) + '　<i>対</i>　<b>' + esc(uni(state, opp)) + '</b></p>' +
-        '<p class="vsbox__card">このカード　<b>' + (mineA ? card.winsA : card.winsB) + '勝' + (mineA ? card.winsB : card.winsA) + '敗' + (card.draws ? card.draws + '分' : '') + '</b>' +
+        '<p class="vsbox__card">次は<b>第' + (card.games.length + 1) + '戦</b>　このカード <b>' + w + '勝' + l + '敗' + (card.draws ? card.draws + '分' : '') + '</b>' +
           (h2h ? '　<span class="muted">通算対戦 ' + h2h.w + '勝' + h2h.l + '敗' + h2h.d + '分</span>' : '') + '</p>' +
-        '<p class="note">' + esc(lead) + '</p>' +
+        (lead ? '<p class="note">' + esc(lead) + '</p>' : '') +
         '<div class="actions">' +
           '<button type="button" class="btn btn--primary btn--wide" id="r-go">第' + (card.games.length + 1) + '戦の試合前へ</button>' +
           '<button type="button" class="btn" id="r-lineup">オーダー変更</button>' +
@@ -11505,15 +11698,36 @@ const CS = (() => {
     show(
       '<div class="cardend ' + (won ? 'is-win' : 'is-lose') + '">' +
         '<p class="cardend__eyebrow">' + esc(isPO ? '入れ替え戦' : Engine.leagueName(state) + '　第' + (se.round + 1) + '節') + '</p>' +
-        '<h2 class="cardend__title">' + (won ? 'カードを取った' : 'カードを落とした') + '</h2>' +
+        '<h2 class="cardend__title">' + (isPO ? (won ? '入れ替え戦に勝利' : '入れ替え戦に敗戦') : (won ? '勝ち点を獲得' : '勝ち点を落とした')) + '</h2>' +
         '<ul class="cardlist">' + cardLine(state, card) + '</ul>' +
-        (isPO ? '' : '<p class="note">' + (won ? '勝ち点1を獲得。' : '勝ち点は相手に。') + '</p>') +
       '</div>' +
       (isPO ? '' : '<h3 class="sub">' + div + '部　順位表</h3>' + standingsTable(state, se, div) +
         '<details class="rosterbox"><summary>この節の全カードの結果</summary>' + others + '</details>') +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="c-next">' +
         (isPO ? '入れ替え戦の結果へ' : (se.round >= 4 ? 'リーグ戦の最終結果へ' : '第' + (se.round + 2) + '節へ')) + '</button></div>',
       (root) => on(root, '#c-next', h.next));
+  }
+
+  /** 入れ替え戦の結果（昇格・残留・降格） */
+  function playoffResult(state, h) {
+    const o = Engine.playoffOutcome(state);
+    const good = o.result === '昇格' || o.result === '残留';
+    const title = o.result === '昇格' ? o.to + '部昇格！' : o.result === '残留' ? o.from + '部残留' : o.result === '降格' ? o.to + '部へ降格' : '昇格ならず';
+    const lead = o.result === '昇格' ? '来季は' + o.to + '部で戦う。' + esc(uni(state, o.opp)) + 'と入れ替わる。'
+      : o.result === '残留' ? esc(uni(state, o.opp)) + 'を退け、来季も' + o.from + '部。'
+      : o.result === '降格' ? esc(uni(state, o.opp)) + 'に敗れ、来季は' + o.to + '部から出直し。'
+      : esc(uni(state, o.opp)) + 'に阻まれ、来季も' + o.from + '部。';
+    show(
+      '<div class="cardend ' + (good ? 'is-win' : 'is-lose') + ' poresult">' +
+        '<p class="cardend__eyebrow">' + esc(College.termLabel(state)) + '　入れ替え戦</p>' +
+        '<h2 class="cardend__title poresult__title">' + esc(title) + '</h2>' +
+        '<p class="incident__text">' + lead + '</p>' +
+        '<p class="cardstat">入れ替え戦 <b>' + o.w + '勝' + o.l + '敗' + (o.d ? o.d + '分' : '') + '</b></p>' +
+        '<ul class="cardlist">' + cardLine(state, o.card) + '</ul>' +
+      '</div>' +
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="po-next">シーズンを終える</button></div>',
+      (root) => on(root, '#po-next', h.next));
+    if (o.result === '昇格') UI.curtain('<b>' + o.to + '部</b><span>昇格</span>', () => {});
   }
 
   /** リーグ戦の最終順位と入れ替え戦 */
@@ -11606,6 +11820,7 @@ const CS = (() => {
       '<div class="incident' + (isInc ? ' is-incident' : '') + '">' +
         '<p class="incident__eyebrow">' + (isInc ? '部内で問題が起きた' : '出来事') + '</p>' +
         '<p class="incident__text">' + esc(item.text) + '</p>' +
+        (item.lines && item.lines.length && !isInc ? '<ul class="incident__lines">' + item.lines.map((l) => '<li>' + esc(l) + '</li>').join('') + '</ul>' : '') +
         (isInc ? '<p class="incident__meta">関わった部員：' + item.names.map(esc).join('・') + '　／　事の重さ：' + sevText + '</p>' +
           '<p class="note">監督としての対応を選んでください。対応によって、処分の重さ・本人の変わり方・チームの空気・大学の評判が変わります。結果は選ぶまで分かりません。</p>' : '') +
         (item.options
@@ -11632,26 +11847,35 @@ const CS = (() => {
   function scouting(state, h) {
     const sc = state.scouting;
     const pres = Records.prestige(state);
+    const abilityLine = (c) => {
+      const p = c.player;
+      return p.kind === 'pitcher'
+        ? '球速 ' + Scouting.veloText(c) + '　制球 ' + Scouting.abilityText(c, 'control') + '　スタミナ ' + Scouting.abilityText(c, 'stamina')
+        : ['meet', 'power', 'speed', 'arm', 'field', 'catch'].map((k) => ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩', field: '守備', catch: '捕球' })[k] + ' ' + Scouting.abilityText(c, k)).join('　');
+    };
+    const tierName = (t) => (t === 'S' ? '超高校級' : t === 'A' ? '注目株' : t === 'B' ? '有望' : '素材');
+    const buttons = (c) =>
+      '<button type="button" class="btn btn--small" data-look="' + c.id + '"' + (sc.points <= 0 || c.look >= Scouting.MAX_LOOK ? ' disabled' : '') + '>視察する</button>' +
+      '<button type="button" class="btn btn--small' + (c.offered ? ' btn--on' : '') + '" data-offer="' + c.id + '">' + (c.offered ? '推薦枠を取り下げる' : '推薦枠を提示') + '</button>' +
+      (c.offered ? '<button type="button" class="btn btn--small' + (sc.special === c.id ? ' btn--on' : '') + '" data-special="' + c.id + '">' + (sc.special === c.id ? '特待生をやめる' : '特待生にする') + '</button>' : '');
+
     const card = (c) => {
       const p = c.player;
       const isPit = p.kind === 'pitcher';
-      const ab = isPit
-        ? '球速 ' + Scouting.veloText(c) + '　制球 ' + Scouting.abilityText(c, 'control') + '　スタミナ ' + Scouting.abilityText(c, 'stamina')
-        : ['meet', 'power', 'speed', 'arm', 'field', 'catch'].map((k) => ({ meet: 'ミート', power: 'パワー', speed: '走力', arm: '肩', field: '守備', catch: '捕球' })[k] + ' ' + Scouting.abilityText(c, k)).join('　');
       const flags = [
         p.koshien ? esc(state.names.hsNational) + '出場' : esc(state.names.hsNational) + '出場なし',
         p.hsCaptain ? '主将経験あり' : '',
         c.proWish ? '<b class="flag flag--pro">プロ志望</b>' : '',
         c.shakaiWish ? '<b class="flag">社会人志望</b>' : '',
       ].filter(Boolean).join('　');
-      return '<article class="scout' + (c.offered ? ' is-offered' : '') + (sc.special === c.id ? ' is-special' : '') + '">' +
+      return '<article class="scout' + (c.offered ? ' is-offered' : '') + (sc.special === c.id ? ' is-special' : '') + '" data-cid="' + c.id + '">' +
         '<header class="scout__head">' +
-          '<span class="scout__tier tier-' + c.tier + '">' + (c.tier === 'S' ? '超高校級' : c.tier === 'A' ? '注目株' : c.tier === 'B' ? '有望' : '素材') + '</span>' +
+          '<span class="scout__tier tier-' + c.tier + '">' + tierName(c.tier) + '</span>' +
           '<b class="scout__name">' + esc(p.name) + '</b>' +
           '<span>' + (isPit ? '投手' : posName(p.pos)) + '　' + UI.handMark(p) + '　' + p.height + 'cm・' + p.weight + 'kg</span>' +
-          '<span class="muted">' + esc(p.hs) + '</span>' +
         '</header>' +
-        '<p class="scout__ab">' + ab + '</p>' +
+        '<p class="scout__hs">出身校：' + esc(p.hs || '―') + '</p>' +
+        '<p class="scout__ab">' + abilityLine(c) + '</p>' +
         '<p class="scout__flags">' + flags + '</p>' +
         '<dl class="scout__grid">' +
           '<div><dt>性格</dt><dd>' + esc(Scouting.personalityText(c)) + '</dd></div>' +
@@ -11663,29 +11887,43 @@ const CS = (() => {
         '<footer class="scout__foot">' +
           '<span class="scout__look">視察 ' + c.look + '/' + Scouting.MAX_LOOK + '</span>' +
           (c.offered ? '<span class="scout__feel">手応え：' + Scouting.feel(state, sc, c) + '</span>' : '') +
-          '<button type="button" class="btn btn--small" data-look="' + c.id + '"' + (sc.points <= 0 || c.look >= Scouting.MAX_LOOK ? ' disabled' : '') + '>視察する</button>' +
-          '<button type="button" class="btn btn--small' + (c.offered ? ' btn--on' : '') + '" data-offer="' + c.id + '">' + (c.offered ? '推薦枠を取り下げる' : '推薦枠を提示') + '</button>' +
-          (c.offered ? '<button type="button" class="btn btn--small' + (sc.special === c.id ? ' btn--on' : '') + '" data-special="' + c.id + '">' + (sc.special === c.id ? '特待生をやめる' : '特待生にする') + '</button>' : '') +
+          buttons(c) +
         '</footer>' +
       '</article>';
     };
+
+    /* 推薦枠・特待生を出した選手は上にまとめる。選んだ顔ぶれを見ながら残りを選べるように */
+    const picked = sc.cands.filter((c) => c.offered).sort((a, b) => (b.id === sc.special) - (a.id === sc.special));
+    const pickedHtml = '<section class="scoutpick">' +
+      '<h3 class="sub">推薦枠を出している選手（' + picked.length + ' / ' + CONFIG.ROSTER.REC_SLOTS + '）</h3>' +
+      (picked.length ? '<ul class="scoutpick__list">' + picked.map((c) => {
+        const p = c.player;
+        return '<li class="scoutpick__i' + (sc.special === c.id ? ' is-special' : '') + '">' +
+          (sc.special === c.id ? '<b class="tag tag--gold">特待生</b>' : '<span class="tag">推薦</span>') +
+          '<span class="scoutpick__nm"><b>' + esc(p.name) + '</b>　' + (p.kind === 'pitcher' ? '投手' : posName(p.pos)) + '・' + tierName(c.tier) + '</span>' +
+          '<span class="scoutpick__ab">' + abilityLine(c) + '</span>' +
+          '<span class="scoutpick__feel">手応え：' + Scouting.feel(state, sc, c) + '</span>' +
+          '<span class="scoutpick__btns">' + buttons(c) + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' : '<p class="note">まだ誰にも推薦枠を出していません。</p>') +
+    '</section>';
+
     show(
       '<h2 class="section-title">新入生スカウト</h2>' +
-      '<p class="section-lead">高校3年生の有望選手を視察し、推薦枠を提示します。来るかどうかは秋の終わりに決まります。</p>' +
       '<div class="scoutbar">' +
         '<span>視察できる回数 <b>' + sc.points + '</b> / ' + Scouting.POINTS + '</span>' +
         '<span>推薦枠 <b>' + sc.offers + '</b> / ' + CONFIG.ROSTER.REC_SLOTS + '</span>' +
         '<span>特待生 <b>' + (sc.special ? 1 : 0) + '</b> / 1</span>' +
         '<span>大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
       '</div>' +
-      '<p class="note">情報は視察するほど確かになります（「？」は見立てに自信がないもの）。強い選手ほど他大学・プロ・社会人と取り合いになり、' +
-        'プロ志望の選手はドラフトで指名されればプロへ進みます。大学の評価（プロ輩出・全国大会・リーグ優勝・最近の成績）が高いほど選ばれやすくなります。</p>' +
+      pickedHtml +
+      '<h3 class="sub">候補の選手（' + sc.cands.length + '人）</h3>' +
       '<div class="scoutlist">' + sc.cands.map(card).join('') + '</div>' +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="s-done">スカウトを終えて秋リーグへ</button></div>',
       (root) => {
-        on(root, '[data-look]', (b) => h.look(b.dataset.look));
-        on(root, '[data-offer]', (b) => h.offer(b.dataset.offer));
-        on(root, '[data-special]', (b) => h.special(b.dataset.special));
+        on(root, '[data-look]', (b) => h.look(b.dataset.look, b));
+        on(root, '[data-offer]', (b) => h.offer(b.dataset.offer, b));
+        on(root, '[data-special]', (b) => h.special(b.dataset.special, b));
         on(root, '#s-done', h.done);
       });
   }
@@ -12008,7 +12246,7 @@ const CS = (() => {
   }
 
   return {
-    show, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
+    show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
     disband, proChoice, saveBox, dateText, bracket,
   };
@@ -12438,7 +12676,8 @@ const App = (() => {
     if (state.mode === 'college' && state.team) {
       try { Engine.check(state); } catch (e) { console.error(e); }
     }
-    if ((state.pending || []).length && GAME_STEPS.indexOf(state.step) < 0) { showPending(); return; }
+    /* 不祥事・出来事はカードとカードのあいだ（次の節の画面に入る前）に出す */
+    if ((state.pending || []).length && GAME_STEPS.indexOf(state.step) < 0 && state.step !== 'cardEnd') { showPending(); return; }
     if (state.mode === 'soccer') { renderSoccer(); return; }
     if (state.mode === 'pro') { renderPro(); return; }
     renderCollege();
@@ -12503,17 +12742,35 @@ const App = (() => {
     if (/_LEAGUE$|_PLAYOFF$|_NATIONAL$/.test(ph)) { renderMatchPhase(); return; }
     if (ph === 'SCOUTING') {
       const sc = state.scouting;
+      /* 押したボタンが画面の同じ位置に残るよう、描き直したあとに位置を合わせる
+         （一番上まで戻されないように） */
+      const keep = (fn) => (id, btn) => {
+        const sel = btn && btn.closest('.scoutpick__i') ? '.scoutpick__i' : '.scout';
+        const anchor = btn ? btn.getBoundingClientRect().top : null;
+        const y = window.scrollY;
+        fn(id);
+        save();
+        render();
+        window.scrollTo(0, y);
+        if (anchor != null) {
+          /* 同じ選手の同じ場所（上のまとめ／候補の一覧）のボタンを探して、ずれたぶんだけ戻す */
+          const card = document.querySelector('.scoutlist [data-cid="' + id + '"]');
+          const target = sel === '.scoutpick__i'
+            ? (document.querySelector('.scoutpick [data-offer="' + id + '"]') || (card && card.querySelector('[data-offer]')))
+            : (card && card.querySelector('[data-offer]'));
+          if (target) window.scrollBy(0, target.getBoundingClientRect().top - anchor);
+        }
+      };
       CS.scouting(state, {
-        look: after((id) => { if (!Scouting.look(sc, id)) toast('これ以上視察できません'); }),
-        offer: after((id) => { if (!Scouting.toggleOffer(sc, id)) toast('推薦枠は' + CONFIG.ROSTER.REC_SLOTS + 'つまでです'); }),
-        special: after((id) => Scouting.toggleSpecial(sc, id)),
+        look: keep((id) => { if (!Scouting.look(sc, id)) toast('これ以上視察できません'); }),
+        offer: keep((id) => { if (!Scouting.toggleOffer(sc, id)) toast('推薦枠は' + CONFIG.ROSTER.REC_SLOTS + 'つまでです'); }),
+        special: keep((id) => Scouting.toggleSpecial(sc, id)),
         done: () => {
           const go = after(() => Engine.endScouting(state));
           if (sc.offers === 0) UI.confirmBox({ title: '推薦枠を出していません', body: '誰にも推薦枠を出さずに終えると、来年の新入生は一般入部だけになります。よろしいですか？', yes: 'このまま終える' }, go);
           else go();
         },
       });
-      window.scrollTo(0, 0);
       return;
     }
     if (ph === 'RETIREMENT') { CS.retirement(state, { next: after(() => Engine.endRetirement(state)) }); return; }
@@ -12552,6 +12809,7 @@ const App = (() => {
     }
     if (st === 'cardEnd') { CS.cardEnd(state, { next: after(() => Engine.nextCard(state)) }); return; }
     if (st === 'final') { CS.final(state, { next: after(() => Engine.afterFinal(state)) }); return; }
+    if (st === 'playoffResult') { CS.playoffResult(state, { next: after(() => Engine.finishPlayoff(state)) }); return; }
     if (st === 'end') { CS.nationalEnd(state, { next: after(() => Engine.closeSeason(state)) }); return; }
     renderGameStep();
     void ph;
@@ -12575,11 +12833,7 @@ const App = (() => {
     if (m.kind === 'league' || m.kind === 'playoff') {
       const c = Engine.currentCard(state);
       const mineA = c.a === state.userUni;
-      extra = '<p class="note">このカード ' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '（2勝先取）。リーグ戦は12回で引き分け。延長10回からタイブレーク（無死一、二塁）。</p>';
-    } else if (m.kind === 'national') {
-      extra = '<p class="note">トーナメント。コールドなし。延長10回からタイブレーク（無死一、二塁）。</p>';
-    } else if (m.kind === 'pro') {
-      extra = '<p class="note">プロの公式戦。12回で引き分け。延長10回からタイブレーク。</p>';
+      extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
     Screens.pregame(state, { view, extra });
   }

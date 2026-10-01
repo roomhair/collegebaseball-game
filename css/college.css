@@ -207,6 +207,8 @@ body { background: var(--bg); color: var(--ink); }
   .slots { grid-template-columns: 1fr; }
 }
 [hidden] { display: none !important; }
+/* 強奪高校野球では最上級生（3年）を太字にしていた。大学では学年の数字はそろえる */
+.g3 { font-weight: inherit; }
 @media (max-width: 440px) {
   .appbar__title { font-size: 15px; letter-spacing: .08em; }
   .appbar__btn span { display: none; }
@@ -214,3 +216,15 @@ body { background: var(--bg); color: var(--ink); }
 .unibtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
 .unibtns small { color: var(--ink-mute); font-weight: 400; }
 .bootnote { grid-column: 1 / -1; border: 1.5px dashed var(--ng); padding: 12px 14px; font-size: 14px; line-height: 1.7; color: var(--ink); background: var(--panel); margin: 0; }
+.cardstat { margin: 0 0 8px; font-size: 15px; }
+.poresult__title { font-size: 34px; }
+.scout__hs { margin: 0; font-size: 13px; }
+.scoutpick { border: 1.5px solid var(--accent); background: var(--panel); padding: 10px 12px; margin: 10px 0 14px; }
+.scoutpick .sub { margin-top: 0; }
+.scoutpick__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.scoutpick__i { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; border-bottom: 1px solid var(--line-soft); padding: 6px 0; font-size: 13px; }
+.scoutpick__i.is-special { background: var(--navy-soft); }
+.scoutpick__nm { min-width: 12em; }
+.scoutpick__ab { color: var(--ink-mute); flex: 1 1 260px; min-width: 0; }
+.scoutpick__feel { color: var(--navy); font-weight: 700; }
+.scoutpick__btns { display: flex; gap: 6px; flex-wrap: wrap; }

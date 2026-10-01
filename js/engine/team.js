@@ -228,7 +228,7 @@ const Team = (() => {
 
   /** 大会と大会のあいだ、オフシーズンでは抜けきる */
   function healPitchers(team) {
-    team.pitchers.forEach((p) => { p.staminaCarry = 0; });
+    team.pitchers.forEach((p) => { p.staminaCarry = 0; if (p.pstam != null) p.pstam = 100; });
   }
 
   /** 持ち越したスタミナの消耗が、今日の試合の目盛りの何割にあたるか */
@@ -239,12 +239,18 @@ const Team = (() => {
 
   /** スタミナの残り具合の色分け（3段階） */
   function staminaTier(p) {
-    const f = staminaCarryFrac(p);
+    const f = p.pstam != null ? 1 - p.pstam / 100 : staminaCarryFrac(p);
     return f >= 0.70 ? 'hi' : (f >= 0.40 ? 'mid' : 'lo');
   }
 
   /** スタミナの残り具合の見せ方（4段階） */
   function staminaLabel(p) {
+    /* 大学版：残りスタミナ（%）を持っているときは、それも添える */
+    if (p.pstam != null) {
+      const f2 = 1 - p.pstam / 100;
+      const w = f2 >= 0.70 ? '消耗大' : f2 >= 0.40 ? 'やや消耗' : f2 >= 0.18 ? '軽い消耗' : '万全';
+      return w + '（残り' + Math.round(p.pstam) + '%）';
+    }
     const f = staminaCarryFrac(p);
     if (f >= 0.70) return '消耗大';
     if (f >= 0.40) return 'やや消耗';

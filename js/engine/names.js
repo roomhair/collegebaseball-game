@@ -149,7 +149,7 @@ const NAMES = (() => {
   /** 高校名（スカウト候補の出身校）。甲子園常連なら強豪校の表から */
   function highSchool(strong) {
     const n = (strong && Math.random() < 0.6) ? pick(NATIONAL_SCHOOLS) : pick(LOCAL_HEAD) + pick(LOCAL_TAIL);
-    return /(高校|学園|学院|附属|義塾|学苑|学館|舘)$/.test(n) ? n + '高' : n + '高校';
+    return /高校$/.test(n) ? n : n + '高校';
   }
 
 

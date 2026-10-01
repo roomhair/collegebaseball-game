@@ -420,7 +420,7 @@ const Screens = (() => {
     let lead = '';
     if (r.card) {
       lead = 'このカード　' + r.card.w + '勝' + r.card.l + '敗' + (r.card.d ? r.card.d + '分' : '') +
-        (r.card.done ? (r.card.won ? '　カードを取った（勝ち点1）' : '　カードを落とした') : '　（2勝先取。まだ続く）');
+        (r.card.done ? (r.kind === 'playoff' ? '' : (r.card.won ? '　勝ち点を獲得' : '　勝ち点を落とした')) : '');
     } else if (r.kind === 'national') {
       lead = r.replay ? '引き分け。再試合になる。' : (r.win ? (r.last ? '優勝！' : '次の回へ進む。') : 'ここで敗退。');
     }
