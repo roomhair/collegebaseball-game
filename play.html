@@ -1348,11 +1348,24 @@ body { background: var(--bg); color: var(--ink); }
 }
 .unibtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
 .unibtns small { color: var(--ink-mute); font-weight: 400; }
+.bootnote { grid-column: 1 / -1; border: 1.5px dashed var(--ng); padding: 12px 14px; font-size: 14px; line-height: 1.7; color: var(--ink); background: var(--panel); margin: 0; }
 
 </style>
 </head>
 <body>
 
+<script>
+  /* 起動中に問題が起きたら、画面に理由を出す（どこで止まったか分かるように） */
+  window.addEventListener('error', function (e) {
+    try {
+      var box = document.getElementById('fatal') || document.createElement('div');
+      box.id = 'fatal';
+      box.style.cssText = 'margin:12px 16px;padding:10px 12px;border:2px solid #a23127;color:#a23127;background:#fff;font-size:13px;white-space:pre-wrap;';
+      box.textContent = '問題が起きて止まりました。この文をそのまま知らせてください：\n' + (e.message || '') + '\n' + (e.filename || '').split('/').pop() + ':' + (e.lineno || '');
+      if (!box.parentNode) document.body.insertBefore(box, document.body.firstChild);
+    } catch (x) {}
+  });
+</script>
 <header class="appbar">
   <button type="button" class="appbar__title" id="btn-home">大学野球監督物語</button>
   <button type="button" class="appbar__btn" id="btn-save" hidden>💾<span>セーブ</span></button>
@@ -1385,7 +1398,14 @@ body { background: var(--bg); color: var(--ink); }
         <p class="hero__lead">2部の大学から、1部優勝・日本一・プロ輩出へ。<br>4年間で選手は入れ替わり、歴史だけが積み上がる。</p>
       </header>
       <h2 class="section-title">データを選ぶ</h2>
-      <div id="slot-list" class="slots"></div>
+      <div id="slot-list" class="slots">
+        <!-- ゲームが動けば、ここはデータ1〜3の欄に置き換わる。置き換わらないときの案内 -->
+        <p class="bootnote" id="boot-note">読み込み中です……<br>
+          しばらくしてもデータ1〜3の欄が出ない場合、この画面ではゲームのプログラムが動いていません。
+          アプリのプレビュー画面（ファイルを開いたときの簡易表示）ではゲームは動かないので、
+          ファイルを<b>Safari・Chrome・Edge</b>などのブラウザで開き直してください。</p>
+      </div>
+      <noscript><p class="bootnote">この画面ではJavaScriptが無効になっているため遊べません。ブラウザでJavaScriptを有効にして開いてください。</p></noscript>
       <div class="rules">
         <h2 class="rules__heading">1年の流れ</h2>
         <ol class="flow">
@@ -8670,10 +8690,10 @@ const Cloud = (() => {
         sent[slot] = d.raw;
         const key = CONFIG.SAVE_PREFIX + slot;
         let here = '', hereAt = 0;
-        try { here = localStorage.getItem(key) || ''; if (here) hereAt = JSON.parse(here).at || 0; } catch (e) { here = ''; }
+        try { here = LS.getItem(key) || ''; if (here) hereAt = JSON.parse(here).at || 0; } catch (e) { here = ''; }
         if (here === d.raw) continue;
         if (here && hereAt >= (d.at || 0)) { push(slot, here); continue; }
-        localStorage.setItem(key, d.raw);
+        LS.setItem(key, d.raw);
         n++;
       } catch (e) { /* 次へ */ }
     }
@@ -8697,9 +8717,31 @@ const Cloud = (() => {
    ================================================== */
 'use strict';
 
+/* 保存の置き場所。ブラウザが保存を禁止しているとき（ファイルを直接開いた・プライベートモード等）は、
+   画面を閉じるまでのあいだだけ覚えておく仮の置き場所で代わりにする（遊べなくはしない） */
+const LS = (() => {
+  try {
+    const k = '__cbbgame_test';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return localStorage;
+  } catch (e) {
+    const m = {};
+    return {
+      memory: true,
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null),
+      setItem: (k, v) => { m[k] = String(v); },
+      removeItem: (k) => { delete m[k]; },
+    };
+  }
+})();
+
 const Storage = {
 
   key(slot) { return CONFIG.SAVE_PREFIX + slot; },
+
+  /** 本当にブラウザに保存できるか（できないときは閉じると消える） */
+  persistent() { return !LS.memory; },
 
   /** 一覧用の見出しを作る */
   metaOf(state) {
@@ -8739,7 +8781,7 @@ const Storage = {
         d: state,
       };
       const raw = JSON.stringify(pack);
-      localStorage.setItem(this.key(slot), raw);
+      LS.setItem(this.key(slot), raw);
       if (typeof Cloud !== 'undefined') Cloud.push(slot, raw);
       return true;
     } catch (e) {
@@ -8751,7 +8793,7 @@ const Storage = {
   /** 読み込む。壊れていたら null（勝手に消さない） */
   load(slot) {
     try {
-      const raw = localStorage.getItem(this.key(slot));
+      const raw = LS.getItem(this.key(slot));
       if (!raw) return null;
       const pack = JSON.parse(raw);
       if (!pack || pack.v !== CONFIG.SAVE_VERSION || !pack.d) return null;
@@ -8768,7 +8810,7 @@ const Storage = {
     for (let i = 1; i <= CONFIG.SLOTS; i++) {
       let item = null;
       try {
-        const raw = localStorage.getItem(this.key(i));
+        const raw = LS.getItem(this.key(i));
         if (raw) {
           const pack = JSON.parse(raw);
           item = { slot: i, at: pack.at, meta: pack.meta || {}, broken: !pack.d };
@@ -8782,16 +8824,16 @@ const Storage = {
   },
 
   remove(slot) {
-    try { localStorage.removeItem(this.key(slot)); } catch (e) { /* 何もしない */ }
+    try { LS.removeItem(this.key(slot)); } catch (e) { /* 何もしない */ }
     if (typeof Cloud !== 'undefined') Cloud.wipe(slot);
   },
 
   /** データをまるごと別の番号へ写す（「別のデータに保存」） */
   copy(from, to) {
     try {
-      const raw = localStorage.getItem(this.key(from));
+      const raw = LS.getItem(this.key(from));
       if (!raw) return false;
-      localStorage.setItem(this.key(to), raw);
+      LS.setItem(this.key(to), raw);
       if (typeof Cloud !== 'undefined') Cloud.push(to, raw);
       return true;
     } catch (e) { return false; }
@@ -11322,7 +11364,9 @@ const CS = (() => {
           '<button type="button" class="btn btn--danger btn--small" data-del="' + n + '">削除</button>' +
         '</div></article>';
     }).join('');
-    UI.html('slot-list', html);
+    UI.html('slot-list', (Storage.persistent() ? '' :
+      '<p class="bootnote">この開き方ではブラウザに保存できません。遊ぶことはできますが、画面を閉じると記録は消えます。' +
+      '記録を残したい場合は、SafariやChromeで開くか、テストプレイ用のリンクから遊んでください。</p>') + html);
     const root = UI.el('slot-list');
     on(root, '[data-load]', (b) => h.load(+b.dataset.load));
     on(root, '[data-new]', (b) => h.fresh(+b.dataset.new, !!list[+b.dataset.new - 1]));

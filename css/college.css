@@ -213,3 +213,4 @@ body { background: var(--bg); color: var(--ink); }
 }
 .unibtns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
 .unibtns small { color: var(--ink-mute); font-weight: 400; }
+.bootnote { grid-column: 1 / -1; border: 1.5px dashed var(--ng); padding: 12px 14px; font-size: 14px; line-height: 1.7; color: var(--ink); background: var(--panel); margin: 0; }

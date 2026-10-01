@@ -95,10 +95,10 @@ const Cloud = (() => {
         sent[slot] = d.raw;
         const key = CONFIG.SAVE_PREFIX + slot;
         let here = '', hereAt = 0;
-        try { here = localStorage.getItem(key) || ''; if (here) hereAt = JSON.parse(here).at || 0; } catch (e) { here = ''; }
+        try { here = LS.getItem(key) || ''; if (here) hereAt = JSON.parse(here).at || 0; } catch (e) { here = ''; }
         if (here === d.raw) continue;
         if (here && hereAt >= (d.at || 0)) { push(slot, here); continue; }
-        localStorage.setItem(key, d.raw);
+        LS.setItem(key, d.raw);
         n++;
       } catch (e) { /* 次へ */ }
     }

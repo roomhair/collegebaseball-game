@@ -56,7 +56,9 @@ const CS = (() => {
           '<button type="button" class="btn btn--danger btn--small" data-del="' + n + '">削除</button>' +
         '</div></article>';
     }).join('');
-    UI.html('slot-list', html);
+    UI.html('slot-list', (Storage.persistent() ? '' :
+      '<p class="bootnote">この開き方ではブラウザに保存できません。遊ぶことはできますが、画面を閉じると記録は消えます。' +
+      '記録を残したい場合は、SafariやChromeで開くか、テストプレイ用のリンクから遊んでください。</p>') + html);
     const root = UI.el('slot-list');
     on(root, '[data-load]', (b) => h.load(+b.dataset.load));
     on(root, '[data-new]', (b) => h.fresh(+b.dataset.new, !!list[+b.dataset.new - 1]));

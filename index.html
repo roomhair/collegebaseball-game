@@ -19,6 +19,18 @@
 </head>
 <body>
 
+<script>
+  /* 起動中に問題が起きたら、画面に理由を出す（どこで止まったか分かるように） */
+  window.addEventListener('error', function (e) {
+    try {
+      var box = document.getElementById('fatal') || document.createElement('div');
+      box.id = 'fatal';
+      box.style.cssText = 'margin:12px 16px;padding:10px 12px;border:2px solid #a23127;color:#a23127;background:#fff;font-size:13px;white-space:pre-wrap;';
+      box.textContent = '問題が起きて止まりました。この文をそのまま知らせてください：\n' + (e.message || '') + '\n' + (e.filename || '').split('/').pop() + ':' + (e.lineno || '');
+      if (!box.parentNode) document.body.insertBefore(box, document.body.firstChild);
+    } catch (x) {}
+  });
+</script>
 <header class="appbar">
   <button type="button" class="appbar__title" id="btn-home">大学野球監督物語</button>
   <button type="button" class="appbar__btn" id="btn-save" hidden>💾<span>セーブ</span></button>
@@ -51,7 +63,14 @@
         <p class="hero__lead">2部の大学から、1部優勝・日本一・プロ輩出へ。<br>4年間で選手は入れ替わり、歴史だけが積み上がる。</p>
       </header>
       <h2 class="section-title">データを選ぶ</h2>
-      <div id="slot-list" class="slots"></div>
+      <div id="slot-list" class="slots">
+        <!-- ゲームが動けば、ここはデータ1〜3の欄に置き換わる。置き換わらないときの案内 -->
+        <p class="bootnote" id="boot-note">読み込み中です……<br>
+          しばらくしてもデータ1〜3の欄が出ない場合、この画面ではゲームのプログラムが動いていません。
+          アプリのプレビュー画面（ファイルを開いたときの簡易表示）ではゲームは動かないので、
+          ファイルを<b>Safari・Chrome・Edge</b>などのブラウザで開き直してください。</p>
+      </div>
+      <noscript><p class="bootnote">この画面ではJavaScriptが無効になっているため遊べません。ブラウザでJavaScriptを有効にして開いてください。</p></noscript>
       <div class="rules">
         <h2 class="rules__heading">1年の流れ</h2>
         <ol class="flow">
