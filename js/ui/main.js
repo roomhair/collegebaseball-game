@@ -298,6 +298,22 @@ const App = (() => {
       extra = '<h4 class="sub">' + div + '部　順位表</h4>' + CS.standingsTable(state, state.season, div);
     }
     GameScreen.result(state, lastSim.res, Object.assign({}, lastSim.meta, { extra }));
+    UI.el('btn-result-next').textContent = nextLabel();
+  }
+
+  /** 結果画面のボタンに「次に何が起きるか」を書く */
+  function nextLabel() {
+    const m = state.match, r = state.lastResult || {};
+    if (m.kind === 'league' || m.kind === 'playoff') {
+      const c = Engine.currentCard(state);
+      return c && !c.done ? '同じカードの第' + (c.games.length + 1) + '戦へ' : 'カードの結果へ';
+    }
+    if (m.kind === 'national') {
+      if (r.replay) return '再試合へ';
+      return (state.national.done || !state.national.alive) ? '大会の結果へ' : '次の回の組み合わせへ';
+    }
+    if (m.kind === 'pro') return state.pro.season.stage === 'regular' ? '順位表へ' : 'シリーズの状況へ';
+    return '次へ';
   }
 
   function resultNext() {
