@@ -1,0 +1,375 @@
+/* ==================================================
+   大学野球  growth.js（強奪高校野球の growth.js。成長力・潜在能力の倍率だけ足した）
+
+   試合が終わったあとの成長と、まれに起きる「覚醒」。
+   ・出た選手は、その試合でどれだけ活躍したかに応じて伸びる。
+     ベンチの選手もわずかに伸びる（練習はしているので）。
+   ・覚醒は一人につき高校3年間で一度だけ。何度も起きると
+     「たまに起きるから嬉しい」が薄れてしまう。
+   ・活躍した試合は文章にして残しておき、引退のときに上位3つを見せる。
+   ================================================== */
+'use strict';
+
+const Growth = (() => {
+
+  /** 打者のその試合の出来（0を平均、大きいほど良い） */
+  function batPerf(s) {
+    if (!s.pa) return 0;
+    return s.h * 1.0 + s.d2 * 0.5 + s.d3 * 1.0 + s.hr * 2.0 +
+           s.rbi * 0.5 + s.bb * 0.3 + s.sb * 0.4 - s.so * 0.15 - (s.ab - s.h) * 0.12;
+  }
+
+  /** 投手のその試合の出来 */
+  function pitPerf(s) {
+    if (!s.outs) return 0;
+    const ip = s.outs / 3;
+    return ip * 0.9 + s.so * 0.30 - s.er * 0.85 - s.bb * 0.15 - s.h * 0.08;
+  }
+
+  /* 学年が下のほうが伸びしろがある */
+  const GRADE_GAIN = { 1: 1.30, 2: 1.15, 3: 1.00, 4: 0.90 };
+
+  /**
+   * 能力は上に行くほど伸びにくい。
+   * 1試合の伸びを大きくすると、頭打ちが無い限り大会の途中で全員Sになってしまう。
+   *
+   * ただし「残りに比例」にはしていない。それだと弱い選手ほど速く伸びるので、
+   * 特訓で積み上げた差が大会の途中で勝手に埋まってしまい、
+   * 上手に遊んでも勝率に出なくなる。
+   * 65あたりまでは満額で伸ばし、そこから上だけを急に鈍らせている。
+   */
+  function headroom(value) {
+    const G = CONFIG.GROWTH;
+    const left = RNG.clamp(Math.max(0, 100 - value) / G.HEAD_SPAN, 0, 1);
+    return RNG.clamp(Math.pow(left, G.HEAD_CURVE), 0.04, 1);
+  }
+
+  function gainFor(value, points) {
+    return Math.max(0, Math.round(
+      points * headroom(value) * RNG.clamp(RNG.norm(1, 0.35), 0.2, 1.9)));
+  }
+
+  /* 制球・スタミナだけが毎試合まとまった予算をもらい、球速・変化球は
+     別枠の低確率抽選だった。結果、投手は制球・スタミナばかり上がり
+     球速・変化球がほとんど伸びない、という偏りが起きていた。
+     そこで球速・変化球（野手は弾道）も同じ予算の分け先に混ぜ、
+     頭打ちも他の能力と同じ式で受けるようにしてある（virtual: true）。 */
+  function statListFor(p) {
+    if (p.kind === 'pitcher') return PITCHER_STATS.concat(VIRTUAL_PIT_STATS);
+    return BATTER_STATS.concat(VIRTUAL_BAT_STATS);
+  }
+
+  const VIRTUAL_PIT_STATS = [
+    { key: 'velo', label: '球速', virtual: true },
+    { key: 'pitch', label: '変化球', virtual: true },
+  ];
+  const VIRTUAL_BAT_STATS = [
+    { key: 'traj', label: '弾道', virtual: true },
+  ];
+
+  /* 球速・変化球・弾道は0〜100の目盛りではないので、headroom/gainFor に
+     渡す前に0〜100へ正規化し、伸びたぶんを実際の単位へ戻す。
+     端数は選手ごとに溜めておき、貯まったら1つ繰り上げる
+     （そうしないと1試合ぶんの伸びが端数のまま消えてしまう）。 */
+  function growVelo(p, points, ups) {
+    const normBefore = RNG.clamp((p.velo - 108) / 52, 0, 1) * 100;
+    const gain = gainFor(normBefore, points);
+    if (gain <= 0) return;
+    /* 0〜100の伸びをkm/hに戻す換算。52/100だと1試合で数km/hも
+       伸びてしまっていたので、半分の26/100に弱めてある */
+    p._veloAcc = (p._veloAcc || 0) + gain * 26 / 100;
+    const whole = Math.floor(p._veloAcc);
+    if (whole <= 0) return;
+    p._veloAcc -= whole;
+    const before = p.velo;
+    p.velo = Math.min(166, before + whole);
+    if (p.velo > before) {
+      ups.push({ key: 'velo', label: '球速', amount: p.velo - before, before, after: p.velo, unit: 'km/h' });
+    }
+  }
+
+  function growPitch(p, points, ups) {
+    const room = (p.pitches || []).filter((q) => q.level < 7);
+    if (!room.length) return;
+    const best = Math.max(...p.pitches.map((q) => q.level));
+    const gain = gainFor(best / 7 * 100, points);
+    if (gain <= 0) return;
+    p._pitchAcc = (p._pitchAcc || 0) + gain * 7 / 100;
+    let whole = Math.floor(p._pitchAcc);
+    if (whole <= 0) return;
+    p._pitchAcc -= whole;
+    while (whole-- > 0) {
+      const rm = p.pitches.filter((q) => q.level < 7);
+      if (!rm.length) break;
+      const q = RNG.pick(rm);
+      const before = q.level;
+      q.level = Math.min(7, before + 1);
+      ups.push({ key: 'pitch', label: q.name, amount: q.level - before, before, after: q.level });
+    }
+  }
+
+  function growTraj(p, points, ups) {
+    if (p.traj >= 4) return;
+    const gain = gainFor((p.traj - 1) / 3 * 100, points);
+    if (gain <= 0) return;
+    p._trajAcc = (p._trajAcc || 0) + gain * 3 / 100;
+    const whole = Math.floor(p._trajAcc);
+    if (whole <= 0) return;
+    p._trajAcc -= whole;
+    const before = p.traj;
+    p.traj = Math.min(4, before + whole);
+    if (p.traj > before) {
+      ups.push({ key: 'traj', label: '弾道', amount: p.traj - before, before, after: p.traj });
+    }
+  }
+
+  /**
+   * 試合後の成長。戻り値は画面に出すための一覧。
+   * ctx = { year, tourLabel, roundName, oppName, win, walkoff, myRuns, oppRuns }
+   */
+  function afterGame(team, ctx) {
+    const report = [];
+    Team.all(team).forEach((p) => {
+      const isPit = p.kind === 'pitcher';
+      const s = p.game;
+      const played = isPit ? s.outs > 0 : s.pa > 0;
+      const perf = isPit ? pitPerf(s) : batPerf(s);
+
+      /* 伸びしろの元。出た選手ほど、活躍した選手ほど多い */
+      const G = CONFIG.GROWTH;
+      let points = played ? G.BASE + RNG.clamp(perf, -1.5, 8) * G.PERF : G.BENCH;
+      points *= GRADE_GAIN[p.grade] || 1;
+      /* 大学版：成長力（growthRate）と潜在能力（potential）の効き */
+      points *= Player.growthMul(p);
+      points *= RNG.clamp(RNG.norm(1, 0.28), 0.3, 1.9);
+
+      const ups = [];
+      const stats = statListFor(p);
+      /* その試合の伸びしろの合計を出し、持っている能力ぜんぶに配る。
+         1つに固めると +40 も跳ねて何が伸びたのか分からなくなるので、
+         配る先を広くして、1つあたりは MAX_STEP で頭を押さえてある。
+         出番が無かった選手は、そのうち2つだけ。 */
+      const budget = points * (isPit ? G.PER_GAME_PIT : G.PER_GAME_BAT);
+      const picked = RNG.shuffle(stats.slice()).slice(0, played ? stats.length : 2);
+      /* 配る比率もばらけさせる。毎回きれいに等分だと機械的に見える */
+      const w = picked.map(() => 0.45 + Math.random());
+      const wsum = w.reduce((a, b) => a + b, 0) || 1;
+      picked.forEach((st, i) => {
+        const share = budget * w[i] / wsum;
+        if (st.key === 'velo') { growVelo(p, share, ups); return; }
+        if (st.key === 'pitch') { growPitch(p, share, ups); return; }
+        if (st.key === 'traj') { growTraj(p, share, ups); return; }
+        const before = p[st.key];
+        const add = Math.min(G.MAX_STEP, gainFor(before, share));
+        if (add > 0) {
+          p[st.key] = RNG.stat(before + add);
+          if (p[st.key] > before) {
+            ups.push({ key: st.key, label: st.label, amount: p[st.key] - before, before, after: p[st.key] });
+          }
+        }
+      });
+      /* 守備についた選手は、その場所の適性が上がることがある。
+         下手なうちほど上がりやすく（G 30%）、上手くなるほど鈍る（B 5%）。
+         守った場所だけが上がる（右翼を守って捕手が上手くなる道理はない） */
+      if (!isPit && played) {
+        const slot = (team.lineup || []).find((sl) => sl.pid === p.id);
+        const up = slot ? Player.tryAptUp(p, slot.pos) : null;
+        if (up) {
+          ups.push({ key: 'apt', label: posName(slot.pos) + '適性', pos: slot.pos,
+                     amount: 1, before: up.before, after: up.after, apt: true });
+        }
+      }
+
+      /* ---- 覚醒 ---- */
+      let awakened = false;
+      if (!p.awakened && played) {
+        const chance = RNG.clamp(0.004 + Math.max(0, perf) * 0.004, 0.004, 0.035);
+        if (RNG.chance(chance)) {
+          awakened = true;
+          p.awakened = true;
+          /* 覚醒も、少数の能力に固めず持っている能力ぜんぶに配る。
+             合計は変えていないが、1つが +15 跳ねることは無くなる。
+             通常の成長と同じ能力に乗ることがあるので（mergeUps でまとまる）、
+             ここを絞らないと合わせて +24 になってしまっていた */
+          const per = isPit ? [4, 9] : [3, 8];
+          /* 球速・変化球・弾道は0〜100の目盛りではないので、ここでは対象にしない
+             （velo/pitch はこのすぐ下、traj はさらにその下で別枠として扱う） */
+          stats.filter((st) => !st.virtual).forEach((st) => {
+            const before = p[st.key];
+            p[st.key] = RNG.stat(before + RNG.range(per[0], per[1]));
+            ups.push({ key: st.key, label: st.label, amount: p[st.key] - before, before, after: p[st.key], awake: true });
+          });
+          if (isPit) {
+            const vb = p.velo;
+            p.velo = Math.min(168, vb + RNG.range(3, 7));
+            ups.push({ key: 'velo', label: '球速', amount: p.velo - vb, before: vb, after: p.velo, unit: 'km/h', awake: true });
+            /* 決め球が一段階よくなる */
+            if (p.pitches.length) {
+              const lb = p.pitches[0].level;
+              p.pitches[0].level = Math.min(7, lb + 1);
+              ups.push({ key: 'pitch', label: p.pitches[0].name, amount: p.pitches[0].level - lb,
+                         before: lb, after: p.pitches[0].level, awake: true });
+            }
+          } else if (p.traj < 4 && RNG.chance(0.18)) {
+            const tb = p.traj;
+            p.traj++;
+            ups.push({ key: 'traj', label: '弾道', amount: 1, before: tb, after: p.traj, awake: true });
+          }
+        }
+      }
+
+      if (ups.length || awakened) {
+        report.push({ pid: p.id, name: p.name, grade: p.grade, kind: p.kind, played, awakened, ups: mergeUps(ups) });
+      }
+
+      /* ---- 名場面 ---- */
+      const hl = highlightOf(p, ctx, perf);
+      if (hl) {
+        p.hl.push(hl);
+        p.hl.sort((a, b) => b.score - a.score);
+        if (p.hl.length > 12) p.hl.length = 12;
+      }
+    });
+
+    /* 覚醒した選手を先に、そのあと伸びの大きい順 */
+    report.sort((a, b) =>
+      (b.awakened - a.awakened) ||
+      (b.ups.reduce((s, u) => s + u.amount, 0) - a.ups.reduce((s, u) => s + u.amount, 0)));
+    return report;
+  }
+
+  /** 同じ能力への上げ幅は1行にまとめる（通常の成長と覚醒が重なることがある） */
+  function mergeUps(ups) {
+    const out = [];
+    ups.forEach((u) => {
+      const hit = out.find((x) => x.label === u.label);
+      if (hit) {
+        hit.amount += u.amount;
+        hit.after = u.after;                 // 最後に落ち着いた値を残す
+        hit.awake = hit.awake || u.awake;
+      }
+      else out.push(Object.assign({}, u));
+    });
+    return out.sort((a, b) => upRank(a) - upRank(b));
+  }
+
+  /* 画面に出すときの並び。毎回ばらばらだと、どこが伸びたのか探すことになる。
+     選手の詳細や特訓の画面と同じ並びにしてある。
+     ここに無いもの（守備適性・変化球など）は後ろにまとめる */
+  const UP_ORDER = ['traj', 'meet', 'power', 'speed', 'arm', 'field', 'catch',
+                    'velo', 'control', 'stamina'];
+
+  function upRank(u) {
+    const i = UP_ORDER.indexOf(u.key);
+    return i < 0 ? UP_ORDER.length : i;
+  }
+
+  /** 打った球種の呼び名（状況の言葉と組み合わせて「勝ち越しタイムリー」などにする） */
+  const HIT_WORD = { HR: 'ホームラン', '3B': '三塁打', SQ: 'スクイズ', BB: '押し出し', HBP: '押し出し' };
+  function hitWord(code) { return HIT_WORD[code] || 'タイムリー'; }
+
+  /* 満塁・3ラン・2ラン・ソロの呼び分け */
+  const HR_RUN_WORD = { 1: 'ソロホームラン', 2: '2ランホームラン', 3: '3ランホームラン', 4: '満塁ホームラン' };
+
+  /**
+   * 試合ログから、この打者にとっていちばんの当たり（先制・同点・勝ち越し・サヨナラ）を探す。
+   * 何打数何安打という数字ではなく「〇〇戦で勝ち越しホームラン」のように場面で語れるようにする。
+   */
+  function findKeyHit(pid, ctx) {
+    if (!ctx.log || !ctx.mySide) return null;
+    const mine = ctx.mySide === 'away' ? 0 : 1;
+    const opp = 1 - mine;
+    const RANK = { walkoff: 4, ahead: 3, tie: 2, first: 1 };
+    let prev = [0, 0];
+    let best = null;
+    let bestHr = null; // 場面が付かなくても、本塁打なら最後の砦として残す
+    for (let i = 0; i < ctx.log.length; i++) {
+      const e = ctx.log[i];
+      if (e.k !== 'pa') { continue; }
+      if (e.batter === pid && e.rbi > 0 &&
+          ['1B', '2B', '3B', 'HR', 'BB', 'HBP', 'SQ'].indexOf(e.code) >= 0) {
+        const beforeMine = prev[mine], beforeOpp = prev[opp];
+        const afterMine = e.score[mine], afterOpp = e.score[opp];
+        const isLast = !ctx.log[i + 1] || ctx.log[i + 1].k === 'end';
+        let kind = null;
+        if (ctx.walkoff && isLast && afterMine > afterOpp) kind = 'walkoff';
+        else if (beforeMine <= beforeOpp && afterMine > afterOpp) kind = 'ahead';
+        else if (beforeMine < beforeOpp && afterMine === afterOpp) kind = 'tie';
+        else if (beforeMine === 0 && beforeOpp === 0) kind = 'first';
+        if (kind) {
+          const r = RANK[kind];
+          if (!best || r > best.r || (r === best.r && e.rbi > best.rbi)) {
+            best = { r, kind, code: e.code, rbi: e.rbi };
+          }
+        }
+        if (e.code === 'HR' && (!bestHr || e.rbi > bestHr.rbi)) bestHr = { rbi: e.rbi };
+      }
+      prev = e.score;
+    }
+    if (best) {
+      const KIND_WORD = { walkoff: 'サヨナラ', ahead: '勝ち越し', tie: '同点', first: '先制' };
+      return KIND_WORD[best.kind] + hitWord(best.code);
+    }
+    if (bestHr) return HR_RUN_WORD[Math.min(4, Math.max(1, bestHr.rbi))] || 'ホームラン';
+    return null;
+  }
+
+  /** その試合が「名場面」に残るか */
+  function highlightOf(p, ctx, perf) {
+    const isPit = p.kind === 'pitcher';
+    const s = p.game;
+    if (isPit ? !s.outs : !s.pa) return null;
+
+    let score = perf;
+    if (ctx.win) score += 1.2;
+    if (ctx.walkoff && !isPit) score += 1.5;
+    /* 大きい舞台ほど値打ちがある */
+    const stage = ctx.roundName === '決勝' ? 2.2 : (ctx.roundName === '準決勝' ? 1.4 : 0.6);
+    score += stage * (ctx.tourLabel === 'national' ? 1.6 : 1);
+    if (score < 2.2) return null;
+
+    const where = (ctx.tourName || '') + ctx.roundName + '・' + ctx.oppName + '戦';
+    let line;
+    if (isPit) {
+      const ip = Math.floor(s.outs / 3) + (s.outs % 3 ? 'と' + (s.outs % 3) + '/3' : '');
+      line = ip + '回 ' + s.h + '安打 ' + s.er + '失点 ' + s.so + '奪三振';
+      if (s.sho) line += '（完封）';
+      else if (s.cg) line += '（完投）';
+      if (ctx.win) line += '（勝利投手）';
+    } else {
+      const keyHit = findKeyHit(p.id, ctx);
+      if (keyHit) {
+        line = keyHit;
+      } else if (s.hr) {
+        line = HR_RUN_WORD[Math.min(4, Math.max(1, s.rbi || 1))] || 'ホームラン';
+      } else if (s.rbi >= 1) {
+        line = s.h >= 3 ? s.h + '安打' + s.rbi + '打点の活躍' : s.rbi + '打点のタイムリー';
+      } else if (s.h >= 3) {
+        line = s.h + '安打の猛打賞';
+      } else {
+        /* 目立った一打が無かった試合。最後の手段として数字だけ残す */
+        line = s.ab + '打数' + s.h + '安打';
+      }
+    }
+    return { score: Math.round(score * 10) / 10, year: ctx.year, where, line, win: !!ctx.win };
+  }
+
+  /** 試合の成績を、大会と通算に足しこむ */
+  function commitStats(team) {
+    Team.all(team).forEach((p) => {
+      const played = p.kind === 'pitcher' ? (p.game.outs > 0 || p.game.g > 0) : p.game.pa > 0;
+      if (played) { p.game.g = 1; } else { p.game.g = 0; }
+      Player.addStats(p.tour, p.game);
+      Player.addStats(p.career, p.game);
+    });
+  }
+
+  /** 大会が始まるときに、大会成績をまっさらにする */
+  function resetTour(team) {
+    Team.all(team).forEach((p) => {
+      p.tour = p.kind === 'pitcher' ? Player.emptyPit() : Player.emptyBat();
+    });
+  }
+
+  return { afterGame, commitStats, resetTour, batPerf, pitPerf };
+})();

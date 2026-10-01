@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>大学野球監督物語</title>
+  <meta name="description" content="架空の大学の野球部監督になり、2部から1部優勝・全国制覇・プロ輩出を目指す長期育成シミュレーション。">
+  <script>
+  (function () {
+    try {
+      var k = localStorage.getItem('cbbgame.theme');
+      document.documentElement.dataset.theme =
+        k || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } catch (e) {}
+  })();
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/college.css">
+</head>
+<body>
+
+<script>
+  /* 起動中に問題が起きたら、画面に理由を出す（どこで止まったか分かるように） */
+  window.addEventListener('error', function (e) {
+    try {
+      var box = document.getElementById('fatal') || document.createElement('div');
+      box.id = 'fatal';
+      box.style.cssText = 'margin:12px 16px;padding:10px 12px;border:2px solid #a23127;color:#a23127;background:#fff;font-size:13px;white-space:pre-wrap;';
+      box.textContent = '問題が起きて止まりました。この文をそのまま知らせてください：\n' + (e.message || '') + '\n' + (e.filename || '').split('/').pop() + ':' + (e.lineno || '');
+      if (!box.parentNode) document.body.insertBefore(box, document.body.firstChild);
+    } catch (x) {}
+  });
+</script>
+<header class="appbar">
+  <button type="button" class="appbar__title" id="btn-home">大学野球監督物語</button>
+  <button type="button" class="appbar__btn" id="btn-save" hidden>💾<span>セーブ</span></button>
+  <button type="button" class="appbar__btn" id="btn-settings" hidden>⚙<span>設定</span></button>
+  <button type="button" class="appbar__icon" id="theme-toggle" aria-label="配色を切り替える">◐</button>
+</header>
+
+<!-- いまどこにいて、何をしているか。ゲーム中は常に出す -->
+<div class="statusbar" id="statusbar" hidden>
+  <div class="statusbar__inner">
+    <div class="statusbar__where" id="status-where"></div>
+    <nav class="statusbar__nav" id="status-nav" aria-label="ゲーム内メニュー">
+      <button type="button" class="navbtn is-on" data-nav="main">進行</button>
+      <button type="button" class="navbtn" data-nav="team">チーム</button>
+      <button type="button" class="navbtn" data-nav="league">リーグ</button>
+      <button type="button" class="navbtn" data-nav="records">成績</button>
+      <button type="button" class="navbtn" data-nav="history">年表</button>
+    </nav>
+  </div>
+</div>
+
+<main id="app">
+
+  <!-- ============ データ選択 ============ -->
+  <section class="screen is-active" id="screen-top">
+    <div class="container">
+      <header class="hero">
+        <p class="hero__eyebrow">UNIVERSITY BASEBALL MANAGER</p>
+        <h1 class="hero__title">大学野球監督物語</h1>
+        <p class="hero__lead">2部の大学から、1部優勝・日本一・プロ輩出へ。<br>4年間で選手は入れ替わり、歴史だけが積み上がる。</p>
+      </header>
+      <h2 class="section-title">データを選ぶ</h2>
+      <div id="slot-list" class="slots">
+        <!-- ゲームが動けば、ここはデータ1〜3の欄に置き換わる。置き換わらないときの案内 -->
+        <p class="bootnote" id="boot-note">読み込み中です……<br>
+          しばらくしてもデータ1〜3の欄が出ない場合、この画面ではゲームのプログラムが動いていません。
+          アプリのプレビュー画面（ファイルを開いたときの簡易表示）ではゲームは動かないので、
+          ファイルを<b>Safari・Chrome・Edge</b>などのブラウザで開き直してください。</p>
+      </div>
+      <noscript><p class="bootnote">この画面ではJavaScriptが無効になっているため遊べません。ブラウザでJavaScriptを有効にして開いてください。</p></noscript>
+      <div class="rules">
+        <h2 class="rules__heading">1年の流れ</h2>
+        <ol class="flow">
+          <li><b>新入生入部</b><span>推薦で決まった新入生と、一般入部の部員が入る</span></li>
+          <li><b>特訓</b><span>練習カードを5回選ぶ。見送れるのは3回まで</span></li>
+          <li><b>春リーグ</b><span>6校総当たり。各カード2勝先取。勝ち点で順位を争う</span></li>
+          <li><b>入替戦・全国</b><span>上位・下位の部と入れ替え。1部優勝なら全国へ</span></li>
+          <li><b>特訓・スカウト</b><span>高校生を視察し、推薦枠を提示する</span></li>
+          <li><b>秋リーグ・引退</b><span>4年生が引退し、プロ・社会人へ巣立つ</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 汎用の画面（大学独自の画面はここに描く） ============ -->
+  <section class="screen" id="screen-main">
+    <div class="container" id="main-body"></div>
+  </section>
+
+  <!-- ============ データセット選択（チーム作り・新入生） ============ -->
+  <section class="screen" id="screen-pick">
+    <div class="container">
+      <h2 class="section-title" id="pick-title">野手を選ぶ</h2>
+      <p class="section-lead" id="pick-lead"></p>
+      <div id="pick-list" class="setlist"></div>
+    </div>
+  </section>
+
+  <!-- ============ チーム完成 ============ -->
+  <section class="screen" id="screen-ready">
+    <div class="container">
+      <h2 class="section-title">チーム完成</h2>
+      <div id="ready-body"></div>
+      <div class="actions">
+        <button type="button" class="btn" id="btn-ready-lineup">オーダー変更</button>
+        <button type="button" class="btn btn--primary" id="btn-ready-next">特訓へ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 特訓期間のお知らせ ============ -->
+  <section class="screen" id="screen-trainintro">
+    <div class="container">
+      <div class="nextup" id="trainintro-body"></div>
+    </div>
+  </section>
+
+  <!-- ============ 特訓 ============ -->
+  <section class="screen" id="screen-training">
+    <div class="container">
+      <h2 class="section-title">特訓</h2>
+      <div class="train-meta">
+        <span>選択 <b id="train-picks">0</b> / <b id="train-picks-max">5</b></span>
+        <span>見送り <b id="train-passes">0</b> / <b id="train-passes-max">3</b></span>
+      </div>
+      <div id="train-card" class="card-slot"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary" id="btn-train-take">選択</button>
+        <button type="button" class="btn" id="btn-train-pass">見送る</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-training-result">
+    <div class="container">
+      <h2 class="section-title">特訓の成果</h2>
+      <div id="train-result"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary btn--wide" id="btn-train-done">次へ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 試合開始前 ============ -->
+  <section class="screen" id="screen-pregame">
+    <div class="container">
+      <h2 class="section-title" id="pregame-title"></h2>
+      <div id="pregame-body"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary" id="btn-play">試合開始</button>
+        <button type="button" class="btn" id="btn-pregame-lineup">オーダー編集</button>
+        <button type="button" class="btn" id="btn-auto">おまかせで試合（結果だけ見る）</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 試合中（強奪高校野球と同じ） ============ -->
+  <section class="screen" id="screen-game">
+    <div class="container container--wide">
+      <div id="game-scoreboard" class="scoreboard-wrap"></div>
+      <div class="speedbar" id="game-speed" role="group" aria-label="試合の速さ">
+        <button type="button" class="btn btn--time" id="btn-time" hidden>タイム</button>
+        <span class="speedbar__label">速さ</span>
+        <button type="button" class="speedbtn" data-sp="0">1打席</button>
+        <button type="button" class="speedbtn is-on" data-sp="1">オート</button>
+        <button type="button" class="speedbtn" data-sp="2">×2</button>
+        <button type="button" class="speedbtn" data-sp="3">×3</button>
+        <button type="button" class="skip" id="btn-skip">スキップ ▶</button>
+      </div>
+      <div id="game-stage" class="stage"></div>
+      <p class="taphint" id="game-taphint" hidden>タップで次の打席へ</p>
+      <div id="game-lineups" class="livelineups"></div>
+    </div>
+  </section>
+
+  <!-- ============ 勝敗 ============ -->
+  <section class="screen" id="screen-verdict">
+    <div class="container">
+      <div class="verdict" id="verdict-body"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary btn--wide" id="btn-verdict-next">成長画面</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 試合後の成長 ============ -->
+  <section class="screen" id="screen-growth">
+    <div class="container">
+      <h2 class="section-title">試合後の成長</h2>
+      <div id="growth-body"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary btn--wide" id="btn-growth-next">試合結果へ</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 試合結果 ============ -->
+  <section class="screen" id="screen-result">
+    <div class="container container--wide">
+      <h2 class="section-title" id="result-title"></h2>
+      <div id="result-body"></div>
+      <div class="actions">
+        <button type="button" class="btn btn--primary btn--wide" id="btn-result-next">次へ</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <p class="footer-note">実在の大学・リーグ・球団・選手とは関係のない架空のシミュレーションです。
+    試合・特訓・チーム作りの仕組みは「強奪高校野球」をもとにしています。</p>
+</footer>
+
+<!-- 選手の詳細やオーダー編集を出す場所 -->
+<div class="modal" id="modal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel" role="dialog" aria-modal="true">
+    <button type="button" class="modal__close" data-close aria-label="閉じる">×</button>
+    <div class="modal__body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- 重要な場面で一瞬挟む幕 -->
+<div class="curtain" id="curtain" hidden><div class="curtain__inner"><span id="curtain-text"></span></div></div>
+
+<script src="js/theme.js"></script>
+<script src="js/engine/config.js"></script>
+<script src="js/engine/rng.js"></script>
+<script src="js/engine/names.js"></script>
+<script src="js/engine/player.js"></script>
+<script src="js/engine/team.js"></script>
+<script src="js/engine/sim.js"></script>
+<script src="js/engine/training.js"></script>
+<script src="js/engine/growth.js"></script>
+<script src="js/engine/persona.js"></script>
+<script src="js/engine/universities.js"></script>
+<script src="js/engine/rivals.js"></script>
+<script src="js/engine/league.js"></script>
+<script src="js/engine/national.js"></script>
+<script src="js/engine/records.js"></script>
+<script src="js/engine/college.js"></script>
+<script src="js/engine/scouting.js"></script>
+<script src="js/engine/incidents.js"></script>
+<script src="js/engine/soccer.js"></script>
+<script src="js/engine/pro.js"></script>
+<script src="js/engine/engine.js"></script>
+<script src="js/engine/cloud.js"></script>
+<script src="js/engine/storage.js"></script>
+<script src="js/ui/ui.js"></script>
+<script src="js/ui/screens.js"></script>
+<script src="js/ui/game-screen.js"></script>
+<script src="js/ui/college-screens.js"></script>
+<script src="js/ui/soccer-screens.js"></script>
+<script src="js/ui/pro-screens.js"></script>
+<script src="js/ui/main.js"></script>
+</body>
+</html>
