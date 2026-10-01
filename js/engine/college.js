@@ -173,7 +173,9 @@ const College = (() => {
      ・1日ごとに回復し、カードが変わる（翌週になる）と全快する
      ・試合の中では、強奪高校野球の「スタミナの持ち越し（staminaCarry）」として効く。
        消耗が残ったまま登板すると、早い回から球威と制球が落ちる */
-  const STAM = { RECOVER: 34, RESTED: 85 };
+  /* RECOVER：1日で戻るぶん（＋スタミナ÷20）。START_MIN：先発したら、早く降りても最低これだけ減る
+     （先発の準備と緊張で消耗する。翌日の連投を避けたくなるように） */
+  const STAM = { RECOVER: 33, RESTED: 85, START_MIN: 68 };
 
   /** 打者1人あたりに減る残りスタミナ（%）。スタミナ50で完投（35人）すると約75%減る */
   function pitchCost(p) { return 2.7 - (p.stamina || 50) / 100 * 1.1; }
@@ -194,7 +196,11 @@ const College = (() => {
   function tirePitchers(team) {
     (team.pitchers || []).forEach((p) => {
       const bf = (p.game && p.game.bf) || 0;
-      if (bf > 0) p.pstam = Math.max(0, Math.round(pstamOf(p) - bf * pitchCost(p)));
+      if (bf > 0) {
+        let drop = bf * pitchCost(p);
+        if (p.game.gs) drop = Math.max(drop, STAM.START_MIN);
+        p.pstam = Math.max(0, Math.round(pstamOf(p) - drop));
+      }
       syncCarry(p);
     });
   }
@@ -202,7 +208,7 @@ const College = (() => {
   /** 1日ぶん回復する。full なら全快（カードが変わったとき） */
   function recoverPitchers(team, full) {
     (team.pitchers || []).forEach((p) => {
-      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 10));
+      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 20));
       syncCarry(p);
     });
   }
@@ -372,7 +378,7 @@ const College = (() => {
   function UI_avg(h, ab) {
     if (!ab) return '.---';
     const v = h / ab;
-    return (v >= 1 ? '1' : '') + v.toFixed(3).replace(/^0/, '');
+    return v >= 1 ? v.toFixed(3) : v.toFixed(3).replace(/^0/, '');
   }
 
   /* ---------- 引退とプロ入り ---------- */

@@ -163,8 +163,7 @@ const GameScreen = (() => {
       '<span class="ll__ab">球速' + p.velo + ' 制球' + r(p.control) +
         ' スタミナ' + r(p.stamina) + '</span>' +
       '<span class="ll__sta' + worn + '">' +
-        '<span class="ll__stanum">スタミナ' + Math.round(left * 100) + '%' +
-          (worn ? '↓' : '') + '</span>' +
+        '<span class="ll__stanum">スタミナ' + (worn ? '↓' : '') + '</span>' +
         '<i class="ll__bar"><b style="width:' + Math.round(left * 100) + '%"></b></i>' +
       '</span>' +
       '<span class="ll__balls">' + (p.pitches || []).map((q) =>
@@ -720,8 +719,8 @@ const GameScreen = (() => {
     const t = myTeam();
     const now = Team.find(t, currentPitcherId(t));
     const list = availablePitchers(t).map((p) => ({
-      p, right: Team.staminaLabel(p),
-      meta: p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
+      p, right: '',
+      meta: UI.staminaBar(p) + '　' + p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
         '　球速 <b class="rankval">' + p.velo + '</b>km/h' +
         '　制球 ' + UI.rankNum(p.control) + '　スタミナ ' + UI.rankNum(p.stamina),
       /* 変化球も出す。試合前に先発を選ぶ画面と同じ並べ方 */
@@ -874,6 +873,47 @@ const GameScreen = (() => {
       '</div>';
   }
 
+  /**
+   * 打撃成績と打席結果を1つの表にする（大学版）。
+   * 左から 打順・守備・選手・打数…通算打率 と並び、その右に1回・2回…の打席結果が続く。
+   * 選手名の列は横にスクロールしても左に残る。
+   */
+  function batPaBox(res, t, label) {
+    const byPid = {};
+    res.log.forEach((e) => {
+      if (e.k !== 'pa' || !e.batter) return;
+      const m = (byPid[e.batter] = byPid[e.batter] || {});
+      (m[e.inning] = m[e.inning] || []).push(e);
+    });
+    const innings = Math.max(9, res.innings || 9);
+    const inLineup = t.lineup.map((sl) => ({ p: Team.find(t, sl.pid), pos: sl.pos })).filter((x) => x.p);
+    const subs = Team.all(t).filter((p) =>
+      p.kind !== 'pitcher' && (p.game.pa > 0 || byPid[p.id]) && !inLineup.some((x) => x.p.id === p.id))
+      .map((p) => ({ p, pos: p.pos }));
+    let head = '<th class="c">打順</th><th class="c">守</th><th class="nm sticky">選手</th>' +
+      '<th>打数</th><th>安打</th><th>本</th><th>点</th><th>四球</th><th>三振</th><th>盗</th><th>通算打率</th>';
+    for (let i = 1; i <= innings; i++) head += '<th class="c inn' + (i === 1 ? ' inn--first' : '') + '">' + i + '回</th>';
+    const rows = inLineup.concat(subs).map((x, i) => {
+      const s = x.p.game;
+      let tds = '<td class="c ord">' + (i < 9 ? i + 1 : '') + '</td>' +
+        '<td class="c">' + posShort(x.pos) + '</td>' +
+        '<td class="nm sticky">' + esc(x.p.name) + '</td>' +
+        '<td class="c">' + s.ab + '</td><td class="c">' + s.h + '</td><td class="c">' + s.hr + '</td>' +
+        '<td class="c">' + s.rbi + '</td><td class="c">' + s.bb + '</td><td class="c">' + s.so + '</td>' +
+        '<td class="c">' + s.sb + '</td>' +
+        '<td class="c hl">' + UI.avg(x.p.career.h, x.p.career.ab) + '</td>';
+      for (let n = 1; n <= innings; n++) {
+        const list = (byPid[x.p.id] || {})[n] || [];
+        tds += '<td class="c pa-td' + (n === 1 ? ' inn--first' : '') + '">' + list.map((e) =>
+          '<span class="pa-cell' + (e.runs ? ' is-run' : '') + '">' + esc(e.text) +
+          (e.runs ? '<b>+' + e.runs + '</b>' : '') + '</span>').join('') + '</td>';
+      }
+      return '<tr data-pid="' + x.p.id + '" class="prow">' + tds + '</tr>';
+    }).join('');
+    return '<h4 class="sub">' + esc(label) + '　打撃成績・打席結果<span class="sub__note">右へスクロールすると各回の打席結果</span></h4>' +
+      '<div class="tablewrap"><table class="box batpa"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
   /** 成長の1行ぶん。守備適性は数字でなく評価で出す */
   function upText(u) {
     if (u.apt) return esc(u.label) + ' ' + u.before + '→' + u.after;
@@ -916,12 +956,10 @@ const GameScreen = (() => {
       scoreboard(res, res.away.team.name, res.home.team.name) +
       growthList(meta.report || []) +
       '<div class="boxes">' +
-        paLog(res, mine, state.team.name) +
-        batBox(mine, state.team.name) +
+        batPaBox(res, mine, state.team.name) +
         pitBox(mine, state.team.name) +
         '<details class="rosterbox"><summary>' + esc(state.opponent.name) + 'の成績</summary>' +
-          paLog(res, state.opponent, state.opponent.name) +
-          batBox(state.opponent, state.opponent.name) +
+          batPaBox(res, state.opponent, state.opponent.name) +
           pitBox(state.opponent, state.opponent.name) +
         '</details>' +
       '</div>' +

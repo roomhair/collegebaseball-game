@@ -134,7 +134,7 @@ const CS = (() => {
         const mark = opts.final ? (div === 1 && r.rank === 1 ? '<i class="tag tag--gold">優勝</i>' :
           (r.rank === 1 ? '<i class="tag tag--up">入替戦へ</i>' : r.rank === 6 ? (div === 3 ? '<i class="tag tag--down">最下位</i>' : '<i class="tag tag--down">入替戦へ</i>') : '')) : '';
         return '<tr class="' + (me ? 'is-me' : '') + '"><td class="c">' + r.rank + '</td>' +
-          '<td class="nm">' + esc(uni(state, r.id)) + (me ? ' <b class="me">自校</b>' : '') + ' ' + mark + '</td>' +
+          '<td class="nm">' + esc(uni(state, r.id)) + ' ' + mark + '</td>' +
           '<td class="c pts">' + r.points + '</td><td class="c">' + r.w + '</td><td class="c">' + r.l + '</td><td class="c">' + r.d + '</td>' +
           '<td class="c">' + pctText(r.pct, r.w, r.l) + '</td><td class="c">' + (r.rf - r.ra > 0 ? '+' : '') + (r.rf - r.ra) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -438,7 +438,7 @@ const CS = (() => {
       const pathText = path.kind === 'pro'
         ? Pro.teamName(state, path.team) + '　' + path.text
         : path.kind === 'shakai' ? path.company + '（社会人野球）' : (path.text || '');
-      const seasonsLine = f.seasons.map((s) => s.y + (s.t === 'spring' ? '春' : '秋') + ' ' + (isPit ? s.s.w + '勝' + s.s.l + '敗' : '打率' + UI.avg(s.s.h, s.s.ab))).join(' / ');
+      const seasonsTable = allSeasons(state, p, f.seasons);
       return '<article class="retire' + (path.kind === 'pro' ? ' is-draft' : '') + '">' +
         '<header class="retire__head">' +
           '<h3><button type="button" class="linkbtn retire__name" data-pid="' + p.id + '">' + esc(p.name) + '</button></h3>' +
@@ -449,7 +449,7 @@ const CS = (() => {
           ? '最速 ' + p.velo + 'km/h　制球 ' + rankOf(p.control) + ' ' + p.control + '　スタミナ ' + rankOf(p.stamina) + ' ' + p.stamina
           : 'ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
         (isPit ? UI.careerPitLine(p.career) : UI.careerBatLine(p.career)) +
-        (seasonsLine ? '<p class="retire__seasons">' + esc(seasonsLine) + '</p>' : '<p class="note">公式戦の出場はなかった。</p>') +
+        seasonsTable +
         ((p.titles || p.japan) ? '<p class="retire__titles">リーグ優勝 ' + (p.titles || 0) + '回' + (p.japan ? '　日本一 ' + p.japan + '回' : '') + '</p>' : '') +
         (f.hist.length ? '<h4 class="sub">4年間の歩み</h4><ol class="histlist">' + f.hist.slice(-8).map((x) => '<li>' + esc(x.text) + '</li>').join('') + '</ol>' : '') +
         (f.top.length ? '<h4 class="sub">活躍シーン</h4><ol class="hllist">' + f.top.map((x) => '<li><span class="hl__where">' + esc(x.where) + '</span><span class="hl__line">' + esc(x.line) + '</span></li>').join('') + '</ol>' : '') +
@@ -467,24 +467,58 @@ const CS = (() => {
       });
   }
 
+  /**
+   * 1年春から4年秋までの全シーズンの成績（引退の画面用）。
+   * 出場しなかったシーズンも「出場なし」として1行出す。監督就任より前のシーズンは「記録なし」
+   */
+  function allSeasons(state, p, seasons) {
+    const isPit = p.kind === 'pitcher';
+    const enrolled = p.enrolled || (state.year - 3);
+    const head = isPit
+      ? '<th>シーズン</th><th>所属</th><th>登板</th><th>勝</th><th>敗</th><th>投球回</th><th>奪三振</th><th>防御率</th>'
+      : '<th>シーズン</th><th>所属</th><th>試合</th><th>打数</th><th>安打</th><th>本塁打</th><th>打点</th><th>打率</th>';
+    const rows = [];
+    for (let g = 1; g <= 4; g++) {
+      ['spring', 'fall'].forEach((t) => {
+        const y = enrolled + g - 1;
+        const label = g + '年' + (t === 'spring' ? '春' : '秋') + '<small>（' + y + '）</small>';
+        const r = seasons.find((x) => x.y === y && x.t === t && x.label !== 'プロ');
+        if (!r) {
+          const before = y < state.startYear;
+          rows.push('<tr class="is-none"><td>' + label + '</td><td class="c" colspan="7">' + (before ? '記録なし（監督就任前）' : '出場なし') + '</td></tr>');
+          return;
+        }
+        const s = r.s;
+        rows.push(isPit
+          ? '<tr><td>' + label + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.w + '</td><td class="c">' + s.l + '</td><td class="c">' + UI.ipText(s.outs) + '</td><td class="c">' + s.so + '</td><td class="c hl">' + UI.era(s.er, s.outs) + '</td></tr>'
+          : '<tr><td>' + label + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.ab + '</td><td class="c">' + s.h + '</td><td class="c">' + s.hr + '</td><td class="c">' + s.rbi + '</td><td class="c hl">' + UI.avg(s.h, s.ab) + '</td></tr>');
+      });
+    }
+    return '<h4 class="sub">シーズンごとの成績</h4><div class="tablewrap"><table class="box seasonlines"><thead><tr>' + head + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  }
+
   /* ---------- 新入生 ---------- */
 
   function arrivals(state, h) {
     const a = state.arrivals || { joined: [], lost: [] };
     const joined = a.joined.map((id) => Team.find(state.team, id)).filter(Boolean);
-    const need = state.newNeed || { bat: 0, pit: 0 };
+    const general = (a.general || []).map((id) => Team.find(state.team, id)).filter(Boolean);
+    /* 野手と投手は列が違うので、表を分ける */
+    const split = (list) => {
+      const bat = list.filter((p) => p.kind !== 'pitcher'), pit = list.filter((p) => p.kind === 'pitcher');
+      return (bat.length ? '<p class="tbllabel">野手</p>' + UI.rosterTable(bat, { college: true, state }) : '') +
+        (pit.length ? '<p class="tbllabel">投手</p>' + UI.rosterTable(pit, { college: true, state }) : '');
+    };
     show(
       '<h2 class="section-title">' + state.year + '年度　新入生入部</h2>' +
       '<h3 class="sub">推薦で入部した新入生（' + joined.length + '人）</h3>' +
-      (joined.length ? UI.rosterTable(joined, { college: true, state }) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
+      (joined.length ? split(joined) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
       (a.over > 0 ? '<p class="note">1学年の上限のため、' + a.over + '人は受け入れられませんでした。</p>' : '') +
       (a.lost.length ? '<h3 class="sub">他の進路を選んだ有望選手</h3><ul class="lostlist">' + a.lost.map((x) =>
         '<li><b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '・' + x.tier + '）' + (x.offered ? '<i class="tag">推薦枠を提示</i>' : '') + ' → ' + esc(x.text) + '</li>').join('') + '</ul>' : '') +
-      '<h3 class="sub">一般入部</h3>' +
-      (need.bat + need.pit > 0
-        ? '<p class="note">あと野手' + need.bat + '人・投手' + need.pit + '人ぶんの空きがあります。次の画面で一般入部の組を選びます。</p>'
-        : '<p class="note">部員は足りています。一般入部の募集は行いません。</p>') +
-      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">' + (need.bat + need.pit > 0 ? '一般入部の新入生を選ぶ' : '春の特訓へ') + '</button></div>',
+      '<h3 class="sub">一般入試で入部した新入生（' + general.length + '人）</h3>' +
+      (general.length ? split(general) : '<p class="note">部員が足りているため、一般入試からの入部はありませんでした。</p>') +
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">春の特訓へ</button></div>',
       (root) => {
         on(root, 'tr.prow', (b) => { const p = Team.find(state.team, b.dataset.pid); if (p) UI.openPlayer(p, { team: state.team, state }); });
         on(root, '#ar-next', h.next);
@@ -654,6 +688,9 @@ const CS = (() => {
     const f = (id, label, v, max) => '<label class="field"><span class="field__label">' + esc(label) + '</span>' +
       '<input type="text" id="' + id + '" class="field__input" maxlength="' + (max || 16) + '" value="' + esc(v) + '"></label>';
     const unis = Object.keys(state.unis).map((id) => f('su-' + id, id === state.userUni ? '自分の大学' : '大学（' + (Universities.divOf(state, id) || '') + '部）', state.unis[id].name, 14)).join('');
+    /* サッカー部・プロ野球の名前は、そのモードに入ってから出す（先に見えるとネタバレになる） */
+    const seenSoccer = state.mode === 'soccer' || (state.records.soccerSeasons || []).length > 0 || !!state.soccerArchive;
+    const seenPro = state.mode === 'pro' || (state.achievements && state.achievements.proEntries > 0);
     const pros = state.proTeamNames.map((n, i) => f('sp-' + i, (i < 6 ? N.proLeagueA : N.proLeagueB) + ' ' + (i % 6 + 1), n, 16)).join('');
     show(
       '<h2 class="section-title">設定</h2>' +
@@ -661,13 +698,13 @@ const CS = (() => {
       '<h3 class="set-heading">リーグ・大会</h3><div class="form">' +
         f('sn-league', 'リーグの名前', N.league) + f('sn-spring', '春の全国大会', N.springNational) + f('sn-fall', '秋の全国大会', N.fallNational) +
         f('sn-hs', '高校の全国大会（スカウトの経歴に出る）', N.hsNational) +
-        f('sn-soccer', 'サッカーのリーグ', N.soccerLeague) + f('sn-soccernat', 'サッカーの全国大会', N.soccerNational) +
+        (seenSoccer ? f('sn-soccer', 'サッカーのリーグ', N.soccerLeague) + f('sn-soccernat', 'サッカーの全国大会', N.soccerNational) : '') +
       '</div>' +
       '<h3 class="set-heading">大学の名前（18校）</h3><div class="form form--grid">' + unis + '</div>' +
-      '<h3 class="set-heading">プロ野球</h3><div class="form">' +
+      (seenPro ? '<h3 class="set-heading">プロ野球</h3><div class="form">' +
         f('sn-pa', 'リーグ1の名前', N.proLeagueA) + f('sn-pb', 'リーグ2の名前', N.proLeagueB) +
         f('sn-pf', 'リーグ決勝シリーズの名前', N.proLeagueFinal) + f('sn-ps', '頂上シリーズの名前', N.proSeries) +
-      '</div><div class="form form--grid">' + pros + '</div>' +
+      '</div><div class="form form--grid">' + pros + '</div>' : '') +
       '<div class="actions">' +
         '<button type="button" class="btn" id="st-back">変えずに戻る</button>' +
         '<button type="button" class="btn btn--primary" id="st-save">保存して戻る</button>' +

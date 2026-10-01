@@ -1363,6 +1363,23 @@ body { background: var(--bg); color: var(--ink); }
 .scoutpick__ab { color: var(--ink-mute); flex: 1 1 260px; min-width: 0; }
 .scoutpick__feel { color: var(--navy); font-weight: 700; }
 .scoutpick__btns { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 投手の残りスタミナのバー */
+.stbar { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; vertical-align: middle; }
+.stbar__track { display: inline-block; width: 64px; height: 7px; background: var(--line-soft); border: 1px solid var(--line); position: relative; }
+.stbar__track b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+.stbar--mid .stbar__track b { background: var(--r-d); }
+.stbar--low .stbar__track b { background: var(--ng); }
+.stbar__word { font-size: 12px; color: var(--ink-mute); }
+.stbar--low .stbar__word { color: var(--ng); font-weight: 700; }
+.spchange { margin-left: 8px; }
+/* 打撃成績＋打席結果の表。選手名は横にスクロールしても左に残す */
+.batpa { border-collapse: separate; border-spacing: 0; }
+.batpa th, .batpa td { white-space: nowrap; }
+.batpa .sticky { position: sticky; left: 0; background: var(--bg); z-index: 1; box-shadow: 1px 0 0 var(--line); }
+.batpa .inn--first { border-left: 2px solid var(--line); }
+.seasonlines tr.is-none td { color: var(--ink-faint); }
+.seasonlines small { color: var(--ink-mute); margin-left: 2px; }
+.tbllabel { margin: 8px 0 2px; font-size: 13px; font-weight: 700; color: var(--ink-mute); }
 
 </style>
 </head>
@@ -2731,8 +2748,7 @@ const Team = (() => {
     /* 大学版：残りスタミナ（%）を持っているときは、それも添える */
     if (p.pstam != null) {
       const f2 = 1 - p.pstam / 100;
-      const w = f2 >= 0.70 ? '消耗大' : f2 >= 0.40 ? 'やや消耗' : f2 >= 0.18 ? '軽い消耗' : '万全';
-      return w + '（残り' + Math.round(p.pstam) + '%）';
+      return f2 >= 0.55 ? '消耗大' : f2 >= 0.30 ? 'やや消耗' : f2 >= 0.12 ? '軽い消耗' : '万全';
     }
     const f = staminaCarryFrac(p);
     if (f >= 0.70) return '消耗大';
@@ -2905,10 +2921,17 @@ const Sim = (() => {
     return { name: got.name, speed };
   }
 
+  const ELITE = { STUFF: 0.9, CTRL: 0.6 };
+
   function resolvePA(bat, pit, defTeam, defRating, fatigue, defenders, offForm, defForm) {
     const d = 1 - (defForm || 0) / 130;
-    const stuff = C(stuffOf(pit) * (1 - 0.22 * fatigue) * d, 0, 1);
-    const ctrl = C((pit.control / 100) * (1 - 0.28 * fatigue) * d, 0, 1);
+    let stuff = C(stuffOf(pit) * (1 - 0.22 * fatigue) * d, 0, 1);
+    let ctrl = C((pit.control / 100) * (1 - 0.28 * fatigue) * d, 0, 1);
+    /* 大学版：球威・制球が一定より上の投手は、そのぶんをもう一段効かせる。
+       平均的な投手（球威0.55・制球55まで）の成績は変わらず、
+       「最速150超・制球A」のようなエースがエースらしく抑えるようにするため */
+    stuff = C(stuff + Math.max(0, stuff - 0.55) * ELITE.STUFF, 0, 1);
+    ctrl = C(ctrl + Math.max(0, ctrl - 0.55) * ELITE.CTRL, 0, 1);
     return resolveVs(bat, stuff, ctrl, defRating, defenders, offForm);
   }
 
@@ -4909,7 +4932,7 @@ const Universities = (() => {
   /* ---------- 相手どうしの試合 ----------
      自分が出ない試合は、全員を作って1打席ずつ回すと時間がかかるので、
      強さの差から得点を引く。勝率は sim.js で測った「強さの差 → 勝率」に合わせてある。 */
-  const QUICK_K = 0.034;
+  const QUICK_K = 0.043;
 
   function poisson(lambda) {
     const L = Math.exp(-lambda);
@@ -5848,7 +5871,9 @@ const College = (() => {
      ・1日ごとに回復し、カードが変わる（翌週になる）と全快する
      ・試合の中では、強奪高校野球の「スタミナの持ち越し（staminaCarry）」として効く。
        消耗が残ったまま登板すると、早い回から球威と制球が落ちる */
-  const STAM = { RECOVER: 34, RESTED: 85 };
+  /* RECOVER：1日で戻るぶん（＋スタミナ÷20）。START_MIN：先発したら、早く降りても最低これだけ減る
+     （先発の準備と緊張で消耗する。翌日の連投を避けたくなるように） */
+  const STAM = { RECOVER: 33, RESTED: 85, START_MIN: 68 };
 
   /** 打者1人あたりに減る残りスタミナ（%）。スタミナ50で完投（35人）すると約75%減る */
   function pitchCost(p) { return 2.7 - (p.stamina || 50) / 100 * 1.1; }
@@ -5869,7 +5894,11 @@ const College = (() => {
   function tirePitchers(team) {
     (team.pitchers || []).forEach((p) => {
       const bf = (p.game && p.game.bf) || 0;
-      if (bf > 0) p.pstam = Math.max(0, Math.round(pstamOf(p) - bf * pitchCost(p)));
+      if (bf > 0) {
+        let drop = bf * pitchCost(p);
+        if (p.game.gs) drop = Math.max(drop, STAM.START_MIN);
+        p.pstam = Math.max(0, Math.round(pstamOf(p) - drop));
+      }
       syncCarry(p);
     });
   }
@@ -5877,7 +5906,7 @@ const College = (() => {
   /** 1日ぶん回復する。full なら全快（カードが変わったとき） */
   function recoverPitchers(team, full) {
     (team.pitchers || []).forEach((p) => {
-      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 10));
+      p.pstam = full ? 100 : Math.min(100, Math.round(pstamOf(p) + STAM.RECOVER + (p.stamina || 50) / 20));
       syncCarry(p);
     });
   }
@@ -6047,7 +6076,7 @@ const College = (() => {
   function UI_avg(h, ab) {
     if (!ab) return '.---';
     const v = h / ab;
-    return (v >= 1 ? '1' : '') + v.toFixed(3).replace(/^0/, '');
+    return v >= 1 ? v.toFixed(3) : v.toFixed(3).replace(/^0/, '');
   }
 
   /* ---------- 引退とプロ入り ---------- */
@@ -6807,8 +6836,14 @@ const Incidents = (() => {
       return ev;
     }
     if (kind === 'ob') {
+      const before = Math.round(t.morale || 55);
       t.morale = RNG.clamp((t.morale || 55) + 4, 5, 95);
+      const after = Math.round(t.morale);
       ev.text = 'OB会から差し入れと激励が届いた。部員たちの表情が明るい。';
+      ev.lines = [
+        'チームの雰囲気 ' + Persona.grade5(before) + before + ' → ' + Persona.grade5(after) + after + '（+' + (after - before) + '）',
+        '雰囲気が良いほど、試合で全員が少しずつ力を出しやすくなり、不祥事も起きにくくなる',
+      ];
       return ev;
     }
     return null;
@@ -8689,11 +8724,12 @@ const Engine = (() => {
                        lost: (state.scouting && state.scouting.results && state.scouting.results.lost) || [],
                        over: joined.length - take.length };
     state.scouting = null;
+    /* 一般入試で入ってくる部員は選べない。足りない人数ぶんが自動で入部する */
     const n2 = College.need(state);
-    state.newNeed = { bat: n2.bat, pit: n2.pit };
-    state.sets = (n2.bat + n2.pit > 0)
-      ? { kind: 'general', list: College.generalSets(state, n2) }
-      : null;
+    state.newNeed = null;
+    state.sets = null;
+    const general = (n2.bat + n2.pit > 0) ? College.generalSets(state, n2, 1)[0] : [];
+    state.arrivals.general = College.enroll(state, general).map((p) => p.id);
   }
 
   function pickGeneral(state, i) {
@@ -9169,7 +9205,7 @@ const UI = (() => {
   function avg(h, ab) {
     if (!ab) return '.---';
     const v = h / ab;
-    return (v >= 1 ? '1' : '') + v.toFixed(3).replace(/^0/, '');
+    return v >= 1 ? v.toFixed(3) : v.toFixed(3).replace(/^0/, '');
   }
 
   function era(er, outs) {
@@ -9234,6 +9270,16 @@ const UI = (() => {
     const i = (team.lineup || []).findIndex((s) => s.pid === p.id);
     if (i < 0) return '控え';
     return (i + 1) + '番 ' + posShort(team.lineup[i].pos);
+  }
+
+  /* ---------- 投手の残りスタミナのバー ----------
+     数字（%）は出さず、バーの長さと色と言葉で見せる */
+  function staminaBar(p) {
+    const left = p.pstam == null ? 100 : Math.max(0, Math.min(100, p.pstam));
+    const tier = left >= 85 ? 'ok' : left >= 60 ? 'mid' : 'low';
+    return '<span class="stbar stbar--' + tier + '" title="' + esc(Team.staminaLabel(p)) + '">' +
+      '<i class="stbar__track"><b style="width:' + Math.round(left) + '%"></b></i>' +
+      '<span class="stbar__word">' + esc(Team.staminaLabel(p)) + '</span></span>';
   }
 
   /* ---------- 大学版：人となり・状態 ---------- */
@@ -9455,8 +9501,7 @@ const UI = (() => {
       abilities += '<div class="stat"><span class="stat__label">最速</span><span class="stat__num stat__num--wide">' + p.velo + ' km/h</span>' + veloInit + '</div>';
       abilities += stat('制球', p.control, null, init.control) + stat('スタミナ', p.stamina, null, init.stamina);
       abilities += '<div class="stat"><span class="stat__label">回復</span>' +
-        '<span class="stat__num stat__num--wide lufat lufat--' + Team.staminaTier(p) + '">' +
-        esc(Team.staminaLabel(p)) + '</span></div>';
+        '<span class="stat__num stat__num--wide">' + staminaBar(p) + '</span></div>';
       abilities += '</div><h4 class="sub">変化球</h4><ul class="pitchlist">' +
         p.pitches.map((q) => {
           const iq = (init.pitches || []).find((x) => x.name === q.name);
@@ -9751,8 +9796,7 @@ const UI = (() => {
         '</span>' +
         '<span class="lustats">最速<b class="rankval">' + p.velo + '</b>　制' + rankNum(p.control) +
           '　ス' + rankNum(p.stamina) +
-          '　<span class="lufat lufat--' + Team.staminaTier(p) + '">' +
-          esc(Team.staminaLabel(p)) + '</span></span>' +
+          '　' + staminaBar(p) + '</span>' +
         '<span class="luapts lupitch">' + p.pitches.map((q) =>
           '<span class="luball">' + esc(q.name) + '<b>' + q.level + '</b></span>').join('') + '</span>' +
         '<span class="luarrow">' +
@@ -9995,7 +10039,7 @@ const UI = (() => {
     avg, era, ipText, stat, rankSpan, rankNum, aptSpan, pullText, handMark,
     playerRow, rosterTable, rosterPanel, sortPlayers, playerDetail, openPlayer,
     lineupEditor, roleText, makeSortable, wireRename, captainPicker,
-    careerBatLine, careerPitLine, init, personaBlock, gradeSpan, seasonTable, histList, collegeCells,
+    careerBatLine, careerPitLine, init, staminaBar, personaBlock, gradeSpan, seasonTable, histList, collegeCells,
   };
 })();
 
@@ -10161,11 +10205,11 @@ const Screens = (() => {
           '　球速 <b class="rankval">' + sp.velo + '</b>km/h' +
           '　制球 ' + UI.rankNum(sp.control) +
           '　スタミナ ' + UI.rankNum(sp.stamina) +
-          '　<span class="spfat' + (Team.staminaTier(sp) !== 'lo' ? ' is-tired' : '') + '">' +
-            esc(Team.staminaLabel(sp)) + '</span>' +
+          '　' + UI.staminaBar(sp) +
         '</span>' +
-        '<span class="spballs">' + pitchText(sp) + '</span></p>' : '') +
-      (opts.pickable ? starterPicker(t) : '') +
+        '<span class="spballs">' + pitchText(sp) + '</span>' +
+        (opts.pickable ? '<button type="button" class="btn btn--small spchange" id="btn-starter">先発を変える</button>' : '') +
+        '</p>' : '') +
       '</div>';
   }
 
@@ -10176,23 +10220,21 @@ const Screens = (() => {
       '<span class="pball">' + esc(q.name) + '<b>' + q.level + '</b></span>').join('');
   }
 
-  /** 先発を選ぶ列。試合前の画面だけに出す */
+  /** 先発を選ぶポップアップの中身 */
   function starterPicker(t) {
     const rot = (t.rotation || []).map((id) => Team.find(t, id)).filter(Boolean);
-    if (rot.length < 2) return '';
-    return '<div class="spick">' +
-      '<div class="spick__head">先発を選ぶ</div>' +
+    return '<h3 class="modal__title">先発を選ぶ</h3>' +
+      '<p class="time__where">スタミナのバーが短い投手は、前の試合の疲れが残っています。</p>' +
       '<div class="spick__list">' + rot.map((p, i) =>
         '<button type="button" class="spick__item' + (i === 0 ? ' is-on' : '') + '" data-pid="' + p.id + '">' +
           '<span class="spick__nm">' + esc(p.name) + '</span>' +
-          '<span class="spick__fat' + (Team.staminaTier(p) !== 'lo' ? ' is-tired' : '') + '">' +
-            esc(Team.staminaLabel(p)) + '</span>' +
+          '<span class="spick__fat">' + UI.staminaBar(p) + '</span>' +
           '<span class="spick__meta">' + p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
             '　球速 <b class="rankval">' + p.velo + '</b>km/h' +
             '　制球 ' + UI.rankNum(p.control) + '　スタミナ ' + UI.rankNum(p.stamina) + '</span>' +
           '<span class="spick__balls">' + pitchText(p) + '</span>' +
         '</button>').join('') +
-      '</div></div>';
+      '</div>';
   }
 
   /* ---------- 特訓期間 ---------- */
@@ -10397,19 +10439,19 @@ const Screens = (() => {
     bindRows(body, open);
     body.querySelectorAll('.pitname').forEach((b) =>
       b.addEventListener('click', () => open(b.dataset.pid)));
-    /* 先発を選ぶ。押された投手を起用順のいちばん前に持ってくる */
-    body.querySelectorAll('.spick__item').forEach((b) => {
-      b.addEventListener('click', () => {
-        const pid = b.dataset.pid;
-        const rot = view.rotation.slice();
-        const i = rot.indexOf(pid);
-        if (i <= 0) return;
-        rot.splice(i, 1); rot.unshift(pid);
-        view.rotation = rot;
-        College.syncBack(state, view);
-        onChange();
-        pregame(state, opts);
-      });
+    /* 先発を選ぶ。ポップアップで押された投手を起用順のいちばん前に持ってくる */
+    const sb = body.querySelector('#btn-starter');
+    if (sb) sb.addEventListener('click', () => {
+      UI.modal(starterPicker(view), { kind: 'starter', onOpen(mb) {
+        mb.querySelectorAll('.spick__item').forEach((b) => b.addEventListener('click', () => {
+          const pid = b.dataset.pid;
+          const rot = view.rotation.slice();
+          const i = rot.indexOf(pid);
+          if (i > 0) { rot.splice(i, 1); rot.unshift(pid); view.rotation = rot; College.syncBack(state, view); onChange(); }
+          UI.closeModal.back = null; UI.closeModal.after = null; UI.closeModal();
+          pregame(state, opts);
+        }));
+      } });
     });
     UI.show('screen-pregame');
   }
@@ -10702,8 +10744,7 @@ const GameScreen = (() => {
       '<span class="ll__ab">球速' + p.velo + ' 制球' + r(p.control) +
         ' スタミナ' + r(p.stamina) + '</span>' +
       '<span class="ll__sta' + worn + '">' +
-        '<span class="ll__stanum">スタミナ' + Math.round(left * 100) + '%' +
-          (worn ? '↓' : '') + '</span>' +
+        '<span class="ll__stanum">スタミナ' + (worn ? '↓' : '') + '</span>' +
         '<i class="ll__bar"><b style="width:' + Math.round(left * 100) + '%"></b></i>' +
       '</span>' +
       '<span class="ll__balls">' + (p.pitches || []).map((q) =>
@@ -11259,8 +11300,8 @@ const GameScreen = (() => {
     const t = myTeam();
     const now = Team.find(t, currentPitcherId(t));
     const list = availablePitchers(t).map((p) => ({
-      p, right: Team.staminaLabel(p),
-      meta: p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
+      p, right: '',
+      meta: UI.staminaBar(p) + '　' + p.grade + '年・' + (p.throws === 'L' ? '左' : '右') +
         '　球速 <b class="rankval">' + p.velo + '</b>km/h' +
         '　制球 ' + UI.rankNum(p.control) + '　スタミナ ' + UI.rankNum(p.stamina),
       /* 変化球も出す。試合前に先発を選ぶ画面と同じ並べ方 */
@@ -11413,6 +11454,47 @@ const GameScreen = (() => {
       '</div>';
   }
 
+  /**
+   * 打撃成績と打席結果を1つの表にする（大学版）。
+   * 左から 打順・守備・選手・打数…通算打率 と並び、その右に1回・2回…の打席結果が続く。
+   * 選手名の列は横にスクロールしても左に残る。
+   */
+  function batPaBox(res, t, label) {
+    const byPid = {};
+    res.log.forEach((e) => {
+      if (e.k !== 'pa' || !e.batter) return;
+      const m = (byPid[e.batter] = byPid[e.batter] || {});
+      (m[e.inning] = m[e.inning] || []).push(e);
+    });
+    const innings = Math.max(9, res.innings || 9);
+    const inLineup = t.lineup.map((sl) => ({ p: Team.find(t, sl.pid), pos: sl.pos })).filter((x) => x.p);
+    const subs = Team.all(t).filter((p) =>
+      p.kind !== 'pitcher' && (p.game.pa > 0 || byPid[p.id]) && !inLineup.some((x) => x.p.id === p.id))
+      .map((p) => ({ p, pos: p.pos }));
+    let head = '<th class="c">打順</th><th class="c">守</th><th class="nm sticky">選手</th>' +
+      '<th>打数</th><th>安打</th><th>本</th><th>点</th><th>四球</th><th>三振</th><th>盗</th><th>通算打率</th>';
+    for (let i = 1; i <= innings; i++) head += '<th class="c inn' + (i === 1 ? ' inn--first' : '') + '">' + i + '回</th>';
+    const rows = inLineup.concat(subs).map((x, i) => {
+      const s = x.p.game;
+      let tds = '<td class="c ord">' + (i < 9 ? i + 1 : '') + '</td>' +
+        '<td class="c">' + posShort(x.pos) + '</td>' +
+        '<td class="nm sticky">' + esc(x.p.name) + '</td>' +
+        '<td class="c">' + s.ab + '</td><td class="c">' + s.h + '</td><td class="c">' + s.hr + '</td>' +
+        '<td class="c">' + s.rbi + '</td><td class="c">' + s.bb + '</td><td class="c">' + s.so + '</td>' +
+        '<td class="c">' + s.sb + '</td>' +
+        '<td class="c hl">' + UI.avg(x.p.career.h, x.p.career.ab) + '</td>';
+      for (let n = 1; n <= innings; n++) {
+        const list = (byPid[x.p.id] || {})[n] || [];
+        tds += '<td class="c pa-td' + (n === 1 ? ' inn--first' : '') + '">' + list.map((e) =>
+          '<span class="pa-cell' + (e.runs ? ' is-run' : '') + '">' + esc(e.text) +
+          (e.runs ? '<b>+' + e.runs + '</b>' : '') + '</span>').join('') + '</td>';
+      }
+      return '<tr data-pid="' + x.p.id + '" class="prow">' + tds + '</tr>';
+    }).join('');
+    return '<h4 class="sub">' + esc(label) + '　打撃成績・打席結果<span class="sub__note">右へスクロールすると各回の打席結果</span></h4>' +
+      '<div class="tablewrap"><table class="box batpa"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
   /** 成長の1行ぶん。守備適性は数字でなく評価で出す */
   function upText(u) {
     if (u.apt) return esc(u.label) + ' ' + u.before + '→' + u.after;
@@ -11455,12 +11537,10 @@ const GameScreen = (() => {
       scoreboard(res, res.away.team.name, res.home.team.name) +
       growthList(meta.report || []) +
       '<div class="boxes">' +
-        paLog(res, mine, state.team.name) +
-        batBox(mine, state.team.name) +
+        batPaBox(res, mine, state.team.name) +
         pitBox(mine, state.team.name) +
         '<details class="rosterbox"><summary>' + esc(state.opponent.name) + 'の成績</summary>' +
-          paLog(res, state.opponent, state.opponent.name) +
-          batBox(state.opponent, state.opponent.name) +
+          batPaBox(res, state.opponent, state.opponent.name) +
           pitBox(state.opponent, state.opponent.name) +
         '</details>' +
       '</div>' +
@@ -11635,7 +11715,7 @@ const CS = (() => {
         const mark = opts.final ? (div === 1 && r.rank === 1 ? '<i class="tag tag--gold">優勝</i>' :
           (r.rank === 1 ? '<i class="tag tag--up">入替戦へ</i>' : r.rank === 6 ? (div === 3 ? '<i class="tag tag--down">最下位</i>' : '<i class="tag tag--down">入替戦へ</i>') : '')) : '';
         return '<tr class="' + (me ? 'is-me' : '') + '"><td class="c">' + r.rank + '</td>' +
-          '<td class="nm">' + esc(uni(state, r.id)) + (me ? ' <b class="me">自校</b>' : '') + ' ' + mark + '</td>' +
+          '<td class="nm">' + esc(uni(state, r.id)) + ' ' + mark + '</td>' +
           '<td class="c pts">' + r.points + '</td><td class="c">' + r.w + '</td><td class="c">' + r.l + '</td><td class="c">' + r.d + '</td>' +
           '<td class="c">' + pctText(r.pct, r.w, r.l) + '</td><td class="c">' + (r.rf - r.ra > 0 ? '+' : '') + (r.rf - r.ra) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -11939,7 +12019,7 @@ const CS = (() => {
       const pathText = path.kind === 'pro'
         ? Pro.teamName(state, path.team) + '　' + path.text
         : path.kind === 'shakai' ? path.company + '（社会人野球）' : (path.text || '');
-      const seasonsLine = f.seasons.map((s) => s.y + (s.t === 'spring' ? '春' : '秋') + ' ' + (isPit ? s.s.w + '勝' + s.s.l + '敗' : '打率' + UI.avg(s.s.h, s.s.ab))).join(' / ');
+      const seasonsTable = allSeasons(state, p, f.seasons);
       return '<article class="retire' + (path.kind === 'pro' ? ' is-draft' : '') + '">' +
         '<header class="retire__head">' +
           '<h3><button type="button" class="linkbtn retire__name" data-pid="' + p.id + '">' + esc(p.name) + '</button></h3>' +
@@ -11950,7 +12030,7 @@ const CS = (() => {
           ? '最速 ' + p.velo + 'km/h　制球 ' + rankOf(p.control) + ' ' + p.control + '　スタミナ ' + rankOf(p.stamina) + ' ' + p.stamina
           : 'ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
         (isPit ? UI.careerPitLine(p.career) : UI.careerBatLine(p.career)) +
-        (seasonsLine ? '<p class="retire__seasons">' + esc(seasonsLine) + '</p>' : '<p class="note">公式戦の出場はなかった。</p>') +
+        seasonsTable +
         ((p.titles || p.japan) ? '<p class="retire__titles">リーグ優勝 ' + (p.titles || 0) + '回' + (p.japan ? '　日本一 ' + p.japan + '回' : '') + '</p>' : '') +
         (f.hist.length ? '<h4 class="sub">4年間の歩み</h4><ol class="histlist">' + f.hist.slice(-8).map((x) => '<li>' + esc(x.text) + '</li>').join('') + '</ol>' : '') +
         (f.top.length ? '<h4 class="sub">活躍シーン</h4><ol class="hllist">' + f.top.map((x) => '<li><span class="hl__where">' + esc(x.where) + '</span><span class="hl__line">' + esc(x.line) + '</span></li>').join('') + '</ol>' : '') +
@@ -11968,24 +12048,58 @@ const CS = (() => {
       });
   }
 
+  /**
+   * 1年春から4年秋までの全シーズンの成績（引退の画面用）。
+   * 出場しなかったシーズンも「出場なし」として1行出す。監督就任より前のシーズンは「記録なし」
+   */
+  function allSeasons(state, p, seasons) {
+    const isPit = p.kind === 'pitcher';
+    const enrolled = p.enrolled || (state.year - 3);
+    const head = isPit
+      ? '<th>シーズン</th><th>所属</th><th>登板</th><th>勝</th><th>敗</th><th>投球回</th><th>奪三振</th><th>防御率</th>'
+      : '<th>シーズン</th><th>所属</th><th>試合</th><th>打数</th><th>安打</th><th>本塁打</th><th>打点</th><th>打率</th>';
+    const rows = [];
+    for (let g = 1; g <= 4; g++) {
+      ['spring', 'fall'].forEach((t) => {
+        const y = enrolled + g - 1;
+        const label = g + '年' + (t === 'spring' ? '春' : '秋') + '<small>（' + y + '）</small>';
+        const r = seasons.find((x) => x.y === y && x.t === t && x.label !== 'プロ');
+        if (!r) {
+          const before = y < state.startYear;
+          rows.push('<tr class="is-none"><td>' + label + '</td><td class="c" colspan="7">' + (before ? '記録なし（監督就任前）' : '出場なし') + '</td></tr>');
+          return;
+        }
+        const s = r.s;
+        rows.push(isPit
+          ? '<tr><td>' + label + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.w + '</td><td class="c">' + s.l + '</td><td class="c">' + UI.ipText(s.outs) + '</td><td class="c">' + s.so + '</td><td class="c hl">' + UI.era(s.er, s.outs) + '</td></tr>'
+          : '<tr><td>' + label + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.ab + '</td><td class="c">' + s.h + '</td><td class="c">' + s.hr + '</td><td class="c">' + s.rbi + '</td><td class="c hl">' + UI.avg(s.h, s.ab) + '</td></tr>');
+      });
+    }
+    return '<h4 class="sub">シーズンごとの成績</h4><div class="tablewrap"><table class="box seasonlines"><thead><tr>' + head + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  }
+
   /* ---------- 新入生 ---------- */
 
   function arrivals(state, h) {
     const a = state.arrivals || { joined: [], lost: [] };
     const joined = a.joined.map((id) => Team.find(state.team, id)).filter(Boolean);
-    const need = state.newNeed || { bat: 0, pit: 0 };
+    const general = (a.general || []).map((id) => Team.find(state.team, id)).filter(Boolean);
+    /* 野手と投手は列が違うので、表を分ける */
+    const split = (list) => {
+      const bat = list.filter((p) => p.kind !== 'pitcher'), pit = list.filter((p) => p.kind === 'pitcher');
+      return (bat.length ? '<p class="tbllabel">野手</p>' + UI.rosterTable(bat, { college: true, state }) : '') +
+        (pit.length ? '<p class="tbllabel">投手</p>' + UI.rosterTable(pit, { college: true, state }) : '');
+    };
     show(
       '<h2 class="section-title">' + state.year + '年度　新入生入部</h2>' +
       '<h3 class="sub">推薦で入部した新入生（' + joined.length + '人）</h3>' +
-      (joined.length ? UI.rosterTable(joined, { college: true, state }) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
+      (joined.length ? split(joined) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
       (a.over > 0 ? '<p class="note">1学年の上限のため、' + a.over + '人は受け入れられませんでした。</p>' : '') +
       (a.lost.length ? '<h3 class="sub">他の進路を選んだ有望選手</h3><ul class="lostlist">' + a.lost.map((x) =>
         '<li><b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '・' + x.tier + '）' + (x.offered ? '<i class="tag">推薦枠を提示</i>' : '') + ' → ' + esc(x.text) + '</li>').join('') + '</ul>' : '') +
-      '<h3 class="sub">一般入部</h3>' +
-      (need.bat + need.pit > 0
-        ? '<p class="note">あと野手' + need.bat + '人・投手' + need.pit + '人ぶんの空きがあります。次の画面で一般入部の組を選びます。</p>'
-        : '<p class="note">部員は足りています。一般入部の募集は行いません。</p>') +
-      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">' + (need.bat + need.pit > 0 ? '一般入部の新入生を選ぶ' : '春の特訓へ') + '</button></div>',
+      '<h3 class="sub">一般入試で入部した新入生（' + general.length + '人）</h3>' +
+      (general.length ? split(general) : '<p class="note">部員が足りているため、一般入試からの入部はありませんでした。</p>') +
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">春の特訓へ</button></div>',
       (root) => {
         on(root, 'tr.prow', (b) => { const p = Team.find(state.team, b.dataset.pid); if (p) UI.openPlayer(p, { team: state.team, state }); });
         on(root, '#ar-next', h.next);
@@ -12155,6 +12269,9 @@ const CS = (() => {
     const f = (id, label, v, max) => '<label class="field"><span class="field__label">' + esc(label) + '</span>' +
       '<input type="text" id="' + id + '" class="field__input" maxlength="' + (max || 16) + '" value="' + esc(v) + '"></label>';
     const unis = Object.keys(state.unis).map((id) => f('su-' + id, id === state.userUni ? '自分の大学' : '大学（' + (Universities.divOf(state, id) || '') + '部）', state.unis[id].name, 14)).join('');
+    /* サッカー部・プロ野球の名前は、そのモードに入ってから出す（先に見えるとネタバレになる） */
+    const seenSoccer = state.mode === 'soccer' || (state.records.soccerSeasons || []).length > 0 || !!state.soccerArchive;
+    const seenPro = state.mode === 'pro' || (state.achievements && state.achievements.proEntries > 0);
     const pros = state.proTeamNames.map((n, i) => f('sp-' + i, (i < 6 ? N.proLeagueA : N.proLeagueB) + ' ' + (i % 6 + 1), n, 16)).join('');
     show(
       '<h2 class="section-title">設定</h2>' +
@@ -12162,13 +12279,13 @@ const CS = (() => {
       '<h3 class="set-heading">リーグ・大会</h3><div class="form">' +
         f('sn-league', 'リーグの名前', N.league) + f('sn-spring', '春の全国大会', N.springNational) + f('sn-fall', '秋の全国大会', N.fallNational) +
         f('sn-hs', '高校の全国大会（スカウトの経歴に出る）', N.hsNational) +
-        f('sn-soccer', 'サッカーのリーグ', N.soccerLeague) + f('sn-soccernat', 'サッカーの全国大会', N.soccerNational) +
+        (seenSoccer ? f('sn-soccer', 'サッカーのリーグ', N.soccerLeague) + f('sn-soccernat', 'サッカーの全国大会', N.soccerNational) : '') +
       '</div>' +
       '<h3 class="set-heading">大学の名前（18校）</h3><div class="form form--grid">' + unis + '</div>' +
-      '<h3 class="set-heading">プロ野球</h3><div class="form">' +
+      (seenPro ? '<h3 class="set-heading">プロ野球</h3><div class="form">' +
         f('sn-pa', 'リーグ1の名前', N.proLeagueA) + f('sn-pb', 'リーグ2の名前', N.proLeagueB) +
         f('sn-pf', 'リーグ決勝シリーズの名前', N.proLeagueFinal) + f('sn-ps', '頂上シリーズの名前', N.proSeries) +
-      '</div><div class="form form--grid">' + pros + '</div>' +
+      '</div><div class="form form--grid">' + pros + '</div>' : '') +
       '<div class="actions">' +
         '<button type="button" class="btn" id="st-back">変えずに戻る</button>' +
         '<button type="button" class="btn btn--primary" id="st-save">保存して戻る</button>' +
@@ -12775,17 +12892,9 @@ const App = (() => {
     }
     if (ph === 'RETIREMENT') { CS.retirement(state, { next: after(() => Engine.endRetirement(state)) }); return; }
     if (ph === 'NEW_MEMBER') {
-      if (st === 'general' && state.sets) {
-        Screens.pick({
-          title: '一般入部の新入生',
-          lead: '野手' + state.newNeed.bat + '人・投手' + state.newNeed.pit + '人ひと組の候補が' + state.sets.list.length + 'つ。入部させる組を選んでください。',
-          setLabel: '候補', pickLabel: 'この新入生たちを迎える',
-          sets: state.sets.list,
-          onSelect: after((i) => Engine.pickGeneral(state, i)),
-        });
-        return;
-      }
-      CS.arrivals(state, { next: after(() => { if (state.sets) state.step = 'general'; else Engine.finishNewMember(state); }) });
+      /* 前の版のデータで、一般入部を選ぶ途中だった場合は最初の組で入部させる */
+      if (state.sets && state.sets.kind === 'general') { Engine.pickGeneral(state, 0); save(); render(); return; }
+      CS.arrivals(state, { next: after(() => Engine.finishNewMember(state)) });
       return;
     }
     if (ph === 'PRO_CHOICE') { CS.proChoice(state, { choose: after((go) => Engine.chooseProEntry(state, go)) }); return; }

@@ -134,10 +134,17 @@ const Sim = (() => {
     return { name: got.name, speed };
   }
 
+  const ELITE = { STUFF: 0.9, CTRL: 0.6 };
+
   function resolvePA(bat, pit, defTeam, defRating, fatigue, defenders, offForm, defForm) {
     const d = 1 - (defForm || 0) / 130;
-    const stuff = C(stuffOf(pit) * (1 - 0.22 * fatigue) * d, 0, 1);
-    const ctrl = C((pit.control / 100) * (1 - 0.28 * fatigue) * d, 0, 1);
+    let stuff = C(stuffOf(pit) * (1 - 0.22 * fatigue) * d, 0, 1);
+    let ctrl = C((pit.control / 100) * (1 - 0.28 * fatigue) * d, 0, 1);
+    /* 大学版：球威・制球が一定より上の投手は、そのぶんをもう一段効かせる。
+       平均的な投手（球威0.55・制球55まで）の成績は変わらず、
+       「最速150超・制球A」のようなエースがエースらしく抑えるようにするため */
+    stuff = C(stuff + Math.max(0, stuff - 0.55) * ELITE.STUFF, 0, 1);
+    ctrl = C(ctrl + Math.max(0, ctrl - 0.55) * ELITE.CTRL, 0, 1);
     return resolveVs(bat, stuff, ctrl, defRating, defenders, offForm);
   }
 

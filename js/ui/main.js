@@ -179,17 +179,9 @@ const App = (() => {
     }
     if (ph === 'RETIREMENT') { CS.retirement(state, { next: after(() => Engine.endRetirement(state)) }); return; }
     if (ph === 'NEW_MEMBER') {
-      if (st === 'general' && state.sets) {
-        Screens.pick({
-          title: '一般入部の新入生',
-          lead: '野手' + state.newNeed.bat + '人・投手' + state.newNeed.pit + '人ひと組の候補が' + state.sets.list.length + 'つ。入部させる組を選んでください。',
-          setLabel: '候補', pickLabel: 'この新入生たちを迎える',
-          sets: state.sets.list,
-          onSelect: after((i) => Engine.pickGeneral(state, i)),
-        });
-        return;
-      }
-      CS.arrivals(state, { next: after(() => { if (state.sets) state.step = 'general'; else Engine.finishNewMember(state); }) });
+      /* 前の版のデータで、一般入部を選ぶ途中だった場合は最初の組で入部させる */
+      if (state.sets && state.sets.kind === 'general') { Engine.pickGeneral(state, 0); save(); render(); return; }
+      CS.arrivals(state, { next: after(() => Engine.finishNewMember(state)) });
       return;
     }
     if (ph === 'PRO_CHOICE') { CS.proChoice(state, { choose: after((go) => Engine.chooseProEntry(state, go)) }); return; }

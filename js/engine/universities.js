@@ -123,7 +123,7 @@ const Universities = (() => {
   /* ---------- 相手どうしの試合 ----------
      自分が出ない試合は、全員を作って1打席ずつ回すと時間がかかるので、
      強さの差から得点を引く。勝率は sim.js で測った「強さの差 → 勝率」に合わせてある。 */
-  const QUICK_K = 0.034;
+  const QUICK_K = 0.043;
 
   function poisson(lambda) {
     const L = Math.exp(-lambda);

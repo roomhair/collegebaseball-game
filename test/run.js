@@ -339,16 +339,35 @@ section('投手のスタミナ：1戦目に投げたエースは2戦目に消耗
   College.tirePitchers(t);
   ok(ace.pstam < 50, '完投（' + bf + '人）すると残りスタミナが大きく減る（' + ace.pstam + '%）');
   College.recoverPitchers(t, false);
-  ok(ace.pstam >= 50 && ace.pstam < 85, '2戦目の朝は消耗が残る（' + ace.pstam + '%）');
+  ok(ace.pstam < 85, '2戦目の朝は消耗が残り、先発の目安（85%）に届かない（' + ace.pstam + '%）');
   College.recoverPitchers(t, false);
-  ok(ace.pstam >= 90, '3戦目の朝はほぼ回復（' + ace.pstam + '%）');
+  ok(ace.pstam > 60, '3戦目の朝には大きく回復している（' + ace.pstam + '%）');
+  /* ふつうの継投をした試合で、エースが3戦目に先発できる割合 */
+  let okG3 = 0;
+  for (let i = 0; i < 50; i++) {
+    const a1 = Universities.makeRoster('me', 52);
+    const e1 = Team.find(a1, a1.rotation[0]);
+    College.recoverPitchers(a1, true);
+    G.Sim.play(a1, Universities.makeRoster('op', 52), { maxInnings: 12 });
+    College.tirePitchers(a1); College.recoverPitchers(a1, false); College.recoverPitchers(a1, false);
+    if (e1.pstam >= College.STAM.RESTED) okG3++;
+  }
+  ok(okG3 >= 40, '継投ありの試合なら、エースはたいてい3戦目に先発できる（50回中' + okG3 + '回）');
   ace.pstam = 40;
   College.recoverPitchers(t, true);
   ok(ace.pstam === 100, 'カードが変わると全快');
   ace.pstam = 30; Team.all(t).forEach((p) => { if (p.kind === 'pitcher' && p !== ace) p.pstam = 100; });
   College.pickRestedStarter(t);
   ok(t.rotation[0] !== ace.id, '相手チームは消耗した投手を先発させない');
-  ok(/残り30%/.test(Team.staminaLabel(ace)), 'スタミナの表示に残り%が出る（' + Team.staminaLabel(ace) + '）');
+  ok(Team.staminaLabel(ace) === '消耗大' && !/%/.test(Team.staminaLabel(ace)), 'スタミナは言葉とバーで出す（%は出さない）');
+  /* 早く降板した先発も、翌日の先発は避けたくなる程度に消耗する */
+  const t2 = Universities.makeRoster('me', 52);
+  const sp = Team.find(t2, t2.rotation[0]);
+  College.recoverPitchers(t2, true);
+  sp.game = { bf: 8, gs: 1, outs: 4 };
+  College.tirePitchers(t2);
+  College.recoverPitchers(t2, false);
+  ok(sp.pstam < 85, '2回で降板した先発も、翌日は先発の目安に届かない（' + sp.pstam + '%）');
   /* 実際の試合の流れでも、カードの中で持ち越される */
   const { s, A } = newState();
   runUntil(s, A, (x) => x.phase === 'SPRING_LEAGUE' && x.step === 'pregame', 2000);
