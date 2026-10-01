@@ -5,7 +5,7 @@
    ページが描かれる前に一度当てておきたいので、読み込みは末尾でも
    dataset.theme の設定だけは即座に行う。 */
 (function () {
-  const KEY = 'npbquiz.theme';
+  const KEY = 'cbbgame.theme';
 
   const saved = (() => {
     try { return localStorage.getItem(KEY); } catch (_) { return null; }
@@ -22,5 +22,4 @@
     });
   }
 
-  if (typeof ADS !== 'undefined') ADS.init();
 })();

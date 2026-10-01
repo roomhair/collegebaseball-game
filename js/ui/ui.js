@@ -1,5 +1,5 @@
 /* ==================================================
-   高校野球  ui.js
+   大学野球  ui.js（強奪高校野球の ui.js に、性格・素行・調子などの大学版の表示を足したもの）
 
    画面の出し入れと、どの画面からも使う部品。
    ・選手の詳細（能力・高校通算成績・名場面）とオーダー編集は
@@ -202,6 +202,80 @@ const UI = (() => {
     return (i + 1) + '番 ' + posShort(team.lineup[i].pos);
   }
 
+  /* ---------- 大学版：人となり・状態 ---------- */
+
+  function gradeSpan(letter) {
+    return '<span class="g5 g5-' + letter + '">' + letter + '</span>';
+  }
+
+  /** 一覧の右側に足す列（成長力・調子・疲労・素行・性格・状態） */
+  function collegeCells(p, opts) {
+    const st = (opts.state && typeof College !== 'undefined') ? College.statusText(opts.state, p) : '';
+    const cond = p.condition || 0;
+    const conductKnown = p.known !== false;
+    return '<td class="c">' + (p.growthRate != null ? gradeSpan(Persona.grade5(p.growthRate)) : '―') + '</td>' +
+      '<td class="c cond cond' + cond + '" title="' + Persona.condLabel(cond) + '">' + Persona.condMark(cond) + '</td>' +
+      '<td class="c fat' + (p.fatigue >= 45 ? ' is-tired' : '') + '">' + Math.round(p.fatigue || 0) + '</td>' +
+      '<td class="c">' + (p.persona ? (conductKnown ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？') : '―') + '</td>' +
+      '<td class="t-persona">' + esc(p.persona ? (p.known ? Persona.label(p.persona.type) : '不明') : '―') + '</td>' +
+      '<td class="c status">' + (st ? '<b class="stbad">' + esc(st) + '</b>' : '') +
+        (p.persona && Persona.isProblem(p) && p.known ? '<i class="warnmark" title="素行に注意">要注意</i>' : '') + '</td>';
+  }
+
+  /** 選手詳細に足す「人となり」 */
+  function personaBlock(p, opts) {
+    if (!p.persona) return '';
+    const known = p.known;
+    const rows = [
+      ['性格', known ? Persona.label(p.persona.type) : '（' + esc(p.rumorText || '人柄はまだよく分からない') + '）'],
+      ['素行', known ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？'],
+      ['キャプテンシー', gradeSpan(Persona.grade5(p.persona.lead))],
+      ['メンタル', known ? gradeSpan(Persona.grade5(p.persona.mental)) : '？'],
+      ['成長力', gradeSpan(Persona.grade5(p.growthRate))],
+      ['将来性', '<span class="rank rank-' + rankOf(p.potential) + '">' + rankOf(p.potential) + '</span>'],
+      ['調子', Persona.condLabel(p.condition || 0) + ' ' + Persona.condMark(p.condition || 0)],
+      ['疲労', Persona.fatigueLabel(p.fatigue || 0) + '（' + Math.round(p.fatigue || 0) + '）'],
+    ];
+    const st = opts && opts.state && typeof College !== 'undefined' ? College.statusText(opts.state, p) : '';
+    const prof = [
+      p.height ? p.height + 'cm・' + p.weight + 'kg' : '',
+      p.hs ? esc(p.hs) + '出身' : '',
+      p.koshien ? (opts && opts.hsNational ? esc(opts.hsNational) : '甲子園') + '出場' : '',
+      p.hsCaptain ? '高校で主将' : '',
+      p.route ? esc(p.route) + 'で入部' : '',
+    ].filter(Boolean).join('　');
+    const eps = (p.episodes || []).map((e) => '<li>' + esc(e) + '</li>').join('');
+    return '<div class="persona">' +
+      (prof ? '<p class="persona__prof">' + prof + '</p>' : '') +
+      (st ? '<p class="persona__status">' + esc(st) + '</p>' : '') +
+      '<dl class="persona__grid">' + rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</dl>' +
+      (eps ? '<h4 class="sub">エピソード</h4><ul class="eplist">' + eps + '</ul>' : '') +
+      '</div>';
+  }
+
+  function seasonTable(p) {
+    const list = p.seasons || [];
+    if (!list.length) return '';
+    const isPit = p.kind === 'pitcher';
+    const head = isPit
+      ? '<th>シーズン</th><th>学年</th><th>所属</th><th>登板</th><th>勝</th><th>敗</th><th>回</th><th>奪三振</th><th>防御率</th>'
+      : '<th>シーズン</th><th>学年</th><th>所属</th><th>試合</th><th>打数</th><th>安打</th><th>本</th><th>点</th><th>打率</th>';
+    const rows = list.map((r) => {
+      const s = r.s;
+      const when = r.y + (r.t === 'spring' ? '春' : '秋') + (r.label === 'プロ' ? '（プロ）' : '');
+      return isPit
+        ? '<tr><td>' + when + '</td><td class="c">' + r.g + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.w + '</td><td class="c">' + s.l + '</td><td class="c">' + ipText(s.outs) + '</td><td class="c">' + s.so + '</td><td class="c hl">' + era(s.er, s.outs) + '</td></tr>'
+        : '<tr><td>' + when + '</td><td class="c">' + r.g + '</td><td class="c">' + (r.div || '') + '部</td><td class="c">' + s.g + '</td><td class="c">' + s.ab + '</td><td class="c">' + s.h + '</td><td class="c">' + s.hr + '</td><td class="c">' + s.rbi + '</td><td class="c hl">' + avg(s.h, s.ab) + '</td></tr>';
+    }).join('');
+    return '<h4 class="sub">シーズン別成績</h4><div class="tablewrap"><table class="box"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function histList(p) {
+    const h = (p.hist || []).slice(-10);
+    if (!h.length) return '';
+    return '<h4 class="sub">歩み</h4><ol class="histlist">' + h.map((x) => '<li>' + esc(x.text) + '</li>').join('') + '</ol>';
+  }
+
   /** 一覧用の1行。能力は評価だけでなく素の数字も添える */
   function playerRow(p, opts) {
     opts = opts || {};
@@ -236,7 +310,7 @@ const UI = (() => {
       /* 投手の一覧に「位置」の列はいらない（全員 投） */
       (isPit ? '' : '<td class="c">' + posShort(p.pos) + '</td>') +
       '<td class="c hand">' + handMark(p) + '</td>' +
-      cells + '</tr>';
+      cells + (opts.college ? collegeCells(p, opts) : '') + '</tr>';
   }
 
   function rosterTable(players, opts) {
@@ -246,9 +320,10 @@ const UI = (() => {
       ? '<th>球速</th><th>制球</th><th>スタ</th><th class="t-break">変化球</th>'
       : '<th>弾道</th><th>ミート</th><th>パワー</th><th>走力</th><th>肩力</th><th>守備</th><th>捕球</th>';
     const roleHead = opts.team ? '<th>いまの役割</th>' : '';
+    const colHead = opts.college ? '<th>成長</th><th>調子</th><th>疲労</th><th>素行</th><th class="t-persona">性格</th><th>状態</th>' : '';
     return '<div class="tablewrap"><table class="roster">' +
       '<thead><tr><th>年</th><th class="nm">選手</th>' + roleHead +
-      (isPit ? '' : '<th>位置</th>') + '<th class="hand">利き</th>' + head + '</tr></thead>' +
+      (isPit ? '' : '<th>位置</th>') + '<th class="hand">利き</th>' + head + colHead + '</tr></thead>' +
       '<tbody>' + players.map((p) => playerRow(p, opts)).join('') + '</tbody></table></div>';
   }
 
@@ -381,12 +456,14 @@ const UI = (() => {
         '<div class="pdetail__meta">' + p.grade + '年　' + (isPit ? '投手' : posName(p.pos)) + '　' + handMark(p) +
         (opts.team && opts.team.captainId === p.id ? '　<b class="capmark">主将</b>' : '') +
         (p.awakened ? '　<b class="awake">覚醒</b>' : '') + '</div>' +
-        (p.from ? '<div class="pdetail__from">' + p.from.year + '年目に ' + esc(p.from.school) + ' から加入</div>' : '') +
+
       '</div>' +
       abilities +
-      '<h4 class="sub">高校通算成績<span class="sub__note">練習試合を含む</span></h4>' +
+      personaBlock(p, opts) +
+      '<h4 class="sub">大学通算成績<span class="sub__note">公式戦</span></h4>' +
       (isPit ? careerPitLine(p.career) : careerBatLine(p.career)) +
-      hl +
+      seasonTable(p) +
+      hl + histList(p) +
       '</div>';
   }
 
@@ -884,6 +961,6 @@ const UI = (() => {
     avg, era, ipText, stat, rankSpan, rankNum, aptSpan, pullText, handMark,
     playerRow, rosterTable, rosterPanel, sortPlayers, playerDetail, openPlayer,
     lineupEditor, roleText, makeSortable, wireRename, captainPicker,
-    careerBatLine, careerPitLine, init,
+    careerBatLine, careerPitLine, init, personaBlock, gradeSpan, seasonTable, histList, collegeCells,
   };
 })();

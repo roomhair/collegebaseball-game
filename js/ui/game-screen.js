@@ -1,5 +1,6 @@
 /* ==================================================
-   高校野球  game-screen.js
+   大学野球  game-screen.js（強奪高校野球の試合画面をそのまま使っている。
+   変えたのは結果画面の見出しと、試合に出たチーム（出場停止を除いた顔ぶれ）を受け取るところだけ）
 
    試合中の画面と、試合結果の画面。
    ・試合の中身は sim.js が先に全部決めている。ここはその log を
@@ -383,7 +384,7 @@ const GameScreen = (() => {
     if (e.k === 'end') {
       closeHalf(st);
       st.awayR = e.score[0]; st.homeR = e.score[1];
-      return '<div class="stage__end">試合終了' + (e.cold ? '（コールド）' : '') + '</div>';
+      return '<div class="stage__end">試合終了' + (e.cold ? '（コールド）' : (e.score[0] === e.score[1] ? '（引き分け）' : '')) + '</div>';
     }
     return '';
   }
@@ -899,35 +900,32 @@ const GameScreen = (() => {
   function result(state, res, meta) {
     const my = meta.mySide === 'away' ? res.away : res.home;
     const op = meta.mySide === 'away' ? res.home : res.away;
-    const win = my.runs > op.runs;
+    const win = my.runs > op.runs, draw = my.runs === op.runs;
+    const mine = meta.team || state.team;
 
-    UI.el('result-title').textContent =
-      meta.tourLabel + '　' + meta.roundName + '　' + (win ? '勝利' : '敗戦');
+    UI.el('result-title').textContent = meta.label + '　' + (draw ? '引き分け' : (win ? '勝利' : '敗戦'));
 
-    const pg = Tournament.perGame(state.tour);
     const html =
-      '<p class="result-score' + (win ? ' is-win' : ' is-lose') + '">' +
+      '<p class="result-score' + (draw ? '' : (win ? ' is-win' : ' is-lose')) + '">' +
         esc(state.team.name) + ' <b>' + my.runs + '</b> - <b>' + op.runs + '</b> ' + esc(state.opponent.name) +
         (res.cold ? '<i>（コールド）</i>' : (res.walkoff ? '<i>（サヨナラ）</i>' : '')) + '</p>' +
       UI.decisionLines(state.lastResult || {}) +
       scoreboard(res, res.away.team.name, res.home.team.name) +
-      growthList(meta.report) +
+      growthList(meta.report || []) +
       '<div class="boxes">' +
-        paLog(res, state.team, state.team.name) +
-        batBox(state.team, state.team.name) +
-        pitBox(state.team, state.team.name) +
+        paLog(res, mine, state.team.name) +
+        batBox(mine, state.team.name) +
+        pitBox(mine, state.team.name) +
         '<details class="rosterbox"><summary>' + esc(state.opponent.name) + 'の成績</summary>' +
           paLog(res, state.opponent, state.opponent.name) +
           batBox(state.opponent, state.opponent.name) +
           pitBox(state.opponent, state.opponent.name) +
         '</details>' +
       '</div>' +
-      '<div class="tourstat"><h4 class="sub">' + esc(meta.tourLabel) + 'の成績</h4>' +
-        '<p>' + state.tour.games + '試合　1試合平均 <b>' + pg.rf.toFixed(1) + '</b>得点／' +
-        '<b>' + pg.ra.toFixed(1) + '</b>失点</p></div>' +
+      (meta.extra || '') +
       '<details class="rosterbox"><summary>両チームの能力一覧</summary>' +
-        '<h4 class="sub">' + esc(state.team.name) + '　野手</h4>' + UI.rosterTable(state.team.batters) +
-        '<h4 class="sub">' + esc(state.team.name) + '　投手</h4>' + UI.rosterTable(state.team.pitchers) +
+        '<h4 class="sub">' + esc(state.team.name) + '　野手</h4>' + UI.rosterTable(mine.batters) +
+        '<h4 class="sub">' + esc(state.team.name) + '　投手</h4>' + UI.rosterTable(mine.pitchers) +
         '<h4 class="sub">' + esc(state.opponent.name) + '　野手</h4>' + UI.rosterTable(state.opponent.batters) +
         '<h4 class="sub">' + esc(state.opponent.name) + '　投手</h4>' + UI.rosterTable(state.opponent.pitchers) +
       '</details>';
@@ -936,7 +934,7 @@ const GameScreen = (() => {
     const body = UI.el('result-body');
     body.querySelectorAll('tr.prow').forEach((tr) => tr.addEventListener('click', () => {
       const p = Team.find(state.team, tr.dataset.pid) || Team.find(state.opponent, tr.dataset.pid);
-      if (p) UI.openPlayer(p, { team: state.team, rename: !!Team.find(state.team, tr.dataset.pid) });
+      if (p) UI.openPlayer(p, { team: state.team, state, rename: false });
     }));
     UI.show('screen-result');
   }

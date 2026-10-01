@@ -277,7 +277,7 @@ const Engine = (() => {
     RNG.seed(g.seed);
     const res = Sim.play(away, home, simOpts(state));
     RNG.unseed();
-    return afterGame(state, res, view);
+    return Object.assign(afterGame(state, res, view), { view });
   }
 
   function simOpts(state) {
@@ -672,7 +672,9 @@ const Engine = (() => {
   function header(state) {
     if (!state) return null;
     const mode = state.mode;
-    const termLabel = state.term === 'spring' ? '春' : '秋';
+    const termLabel = /^(SUMMER_TRAINING|SCOUTING)$/.test(state.phase) ? '夏'
+      : (state.phase === 'NEW_MEMBER' || state.phase === 'TEAM_CREATION') ? '春'
+      : (state.term === 'spring' ? '春' : '秋');
     let place = '';
     if (mode === 'college' && state.divisions) {
       const d = Universities.divOf(state, state.userUni);
@@ -681,7 +683,7 @@ const Engine = (() => {
         rank = ' ' + League.rankOfTeam(state.season, state.userUni).rank + '位';
       } else if (state.season && state.season.done) {
         const r = League.rankOfTeam(state.season, state.userUni);
-        if (r && r.div === d) rank = ' ' + r.rank + '位';
+        if (r) rank = '（' + (state.season.term === 'spring' ? '春' : '秋') + 'は' + r.div + '部' + r.rank + '位）';
       }
       place = d + '部' + rank;
     } else if (mode === 'soccer' && state.soccer) {

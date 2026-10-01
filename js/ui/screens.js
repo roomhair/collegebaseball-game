@@ -1,7 +1,9 @@
 /* ==================================================
-   高校野球  screens.js
+   大学野球  screens.js
 
-   試合以外の画面。描くのはここ、進行の判断は main.js。
+   強奪高校野球の screens.js から、チーム作り・特訓・試合前・勝敗・成長の画面を
+   そのまま使い、大学向けに見出しや項目だけ直したもの。
+   大学独自の画面（リーグ・スカウト・不祥事など）は college-screens.js。
    ================================================== */
 'use strict';
 
@@ -17,7 +19,7 @@ const Screens = (() => {
   /* ---------- データセット選択 ---------- */
 
   function gradeText(byGrade) {
-    return [1, 2, 3].filter((g) => byGrade[g]).map((g) => g + '年' + byGrade[g] + '人').join('・');
+    return [1, 2, 3, 4].filter((g) => byGrade[g]).map((g) => g + '年' + byGrade[g] + '人').join('・');
   }
 
   function pick(opt) {
@@ -28,15 +30,17 @@ const Screens = (() => {
     const pickLabel = opt.pickLabel || 'このチームにする';
 
     const html = opt.sets.map((players, i) => {
-      const s = Dataset.summary(players);
+      const s = College.setSummary(players);
       return '<article class="dataset">' +
         '<header class="dataset__head">' +
           '<h3 class="dataset__no">' + esc(setLabel) + ' ' + (i + 1) + '</h3>' +
           '<p class="dataset__meta">' + s.count + '人　' + gradeText(s.byGrade) +
-            '　<span class="dataset__best">注目： ' + esc(s.best.name) + '（' + s.best.grade + '年）</span></p>' +
+            '　<span class="dataset__best">主力： ' + esc(s.best.name) + '（' + s.best.grade + '年）</span>' +
+            '　<span class="dataset__best">有望株： ' + esc(s.prospect.name) + '（' + s.prospect.grade + '年・成長力' + Persona.grade5(s.prospect.growthRate) + '）</span>' +
+            (s.problems ? '　<span class="dataset__warn">素行に不安：' + s.problems + '人</span>' : '') + '</p>' +
           '<button type="button" class="btn btn--primary dataset__pick" data-i="' + i + '">' + esc(pickLabel) + '</button>' +
         '</header>' +
-        UI.rosterTable(players) +
+        UI.rosterTable(players, { college: true }) +
       '</article>';
     }).join('');
     UI.html('pick-list', html);
@@ -65,28 +69,22 @@ const Screens = (() => {
     const t = state.team;
     const html =
       '<p class="section-lead">' + esc(t.name) + '　部員' + Team.all(t).length + '人　' +
-        'チーム力 <b>' + Team.strength(t) + '</b></p>' +
+        'チーム力 <b>' + Team.strength(t) + '</b>　' + esc(state.names.league) + ' 2部からのスタート</p>' +
+      '<p class="note">キャプテンを決めると特訓に進めます。キャプテンシーの高い選手ほどチームをまとめ、不祥事を起こしにくくします。' +
+        '選手を押すと、性格・素行・成長力などが見られます。名前もそこで変えられます。</p>' +
       captainBox(t) +
       lineupCard(t) +
       '<h3 class="sub">野手</h3><div id="ready-bat"></div>' +
-      '<h3 class="sub">投手</h3><div id="ready-pit"></div>' +
-      '<label class="field field--check field--boxed">' +
-        '<input type="checkbox" id="ready-poach"' + (state.settings.poach ? ' checked' : '') + '>' +
-        '<span>敗戦時、相手チームに選手を引き抜かれる<i>（外すと引き抜かれません）</i></span>' +
-      '</label>';
+      '<h3 class="sub">投手</h3><div id="ready-pit"></div>';
     UI.html('ready-body', html);
     const body = UI.el('ready-body');
     const open = (pid) => {
       const p = Team.find(t, pid);
-      if (p) UI.openPlayer(p, { team: t, onRename: () => ready(state) });
+      if (p) UI.openPlayer(p, { team: t, state, onRename: () => { onChange(); ready(state); } });
     };
-    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open });
-    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open });
+    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open, college: true, state });
+    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open, college: true, state });
     bindRows(body, open);
-    body.querySelector('#ready-poach').addEventListener('change', (e) => {
-      state.settings.poach = e.target.checked;
-      Storage.saveSettings(state.settings);
-    });
     wireCaptain(body, t, () => ready(state));
     gateTraining(t);
     UI.show('screen-ready');
@@ -196,20 +194,21 @@ const Screens = (() => {
 
   /* ---------- 特訓期間 ---------- */
 
-  function trainingIntro(state) {
+  function trainingIntro(state, lead) {
     const t = state.team;
     const cap = Team.captain(t);
+    const H = Engine.header(state);
     UI.html('trainintro-body',
-      '<p class="nextup__eyebrow">' + state.year + '年目</p>' +
-      '<h2 class="nextup__title">特訓期間</h2>' +
-      '<p class="nextup__vs">新入生を迎えた' + esc(t.name) + 'の、夏までの練習が始まる。</p>' +
+      '<p class="nextup__eyebrow">' + esc(H.year + ' ' + H.term) + '</p>' +
+      '<h2 class="nextup__title">' + esc(H.phase) + '</h2>' +
+      '<p class="nextup__vs">' + esc(lead || '') + '</p>' +
+      '<p class="note">練習カードが1枚ずつ出ます。「選択」は' + CONFIG.TRAINING.PICKS + '回、「見送る」は' + CONFIG.TRAINING.PASSES +
+        '回まで。練習禁止・ケガの選手には練習が回りません。</p>' +
       captainBox(t) +
-      /* キャプテンが決まるまでは先へ進ませない。
-         画面をタップすると特訓に入るので、注意書きも出す */
       (cap
-        ? '<p class="taphint taphint--static">タップで特訓へ</p>'
+        ? '<button type="button" class="btn btn--primary btn--wide" id="btn-train-start">特訓を始める</button>'
         : '<p class="capwarn">キャプテンを決めると特訓に進めます</p>'));
-    wireCaptain(UI.el('trainintro-body'), t, () => trainingIntro(state));
+    wireCaptain(UI.el('trainintro-body'), t, () => trainingIntro(state, lead));
     UI.show('screen-trainintro');
   }
 
@@ -372,35 +371,25 @@ const Screens = (() => {
     UI.show('screen-training-result');
   }
 
-  /* ---------- 大会開幕 ---------- */
-
-  function opening(state) {
-    const isNational = state.tour.kind === 'national';
-    const name = isNational ? state.settings.nationalName : '地方大会';
-    UI.el('opening-year').textContent = state.year + '年目';
-    UI.el('opening-title').textContent = name + ' 開幕';
-    UI.el('opening-lead').textContent = isNational
-      ? '全国の頂点まであと7つ。' + esc(state.team.name) + '、初戦へ。'
-      : esc(state.team.name) + '、夏の地方大会へ。';
-    UI.show('screen-opening');
-  }
-
   /* ---------- 試合開始前 ---------- */
 
   function pregame(state, opts) {
-    const r = Tournament.currentRound(state.tour);
-    const label = (state.tour.kind === 'national' ? state.settings.nationalName : '地方大会');
-    UI.el('pregame-title').textContent = label + '　' + r.name;
+    const m = state.match;
+    const view = opts.view;
+    UI.el('pregame-title').textContent = m.label;
+    const out = Team.all(state.team).filter((p) => !Team.all(view).includes(p));
     const html =
-      /* 相手のチーム力は出さない。オーダーと能力を見て、自分で見積もってもらう */
       '<p class="section-lead vs">' + esc(state.team.name) + '　<i>対</i>　' + esc(state.opponent.name) + '</p>' +
-      '<div class="twocol">' + lineupCard(state.team, { pickable: true }) +
+      (opts.extra || '') +
+      (view.rebuilt ? '<p class="note note--warn">出場できない選手がいたため、オーダーを組み直しました。</p>' : '') +
+      (out.length ? '<p class="note">出場できない選手：' + out.map((p) => esc(p.name) + '（' + esc(College.statusText(state, p) || '―') + '）').join('、') + '</p>' : '') +
+      '<div class="twocol">' + lineupCard(view, { pickable: true }) +
         lineupCard(state.opponent) + '</div>';
     UI.html('pregame-body', html);
     const body = UI.el('pregame-body');
     const open = (pid) => {
       const p = Team.find(state.team, pid) || Team.find(state.opponent, pid);
-      if (p) UI.openPlayer(p, { team: state.team, rename: !!Team.find(state.team, pid), onRename: () => pregame(state, opts) });
+      if (p) UI.openPlayer(p, { team: state.team, state, rename: !!Team.find(state.team, pid), onRename: () => { onChange(); pregame(state, opts); } });
     };
     bindRows(body, open);
     body.querySelectorAll('.pitname').forEach((b) =>
@@ -409,12 +398,13 @@ const Screens = (() => {
     body.querySelectorAll('.spick__item').forEach((b) => {
       b.addEventListener('click', () => {
         const pid = b.dataset.pid;
-        const rot = state.team.rotation.slice();
+        const rot = view.rotation.slice();
         const i = rot.indexOf(pid);
         if (i <= 0) return;
         rot.splice(i, 1); rot.unshift(pid);
-        state.team.rotation = rot;
-        if (opts && opts.onChange) opts.onChange();
+        view.rotation = rot;
+        College.syncBack(state, view);
+        onChange();
         pregame(state, opts);
       });
     });
@@ -425,20 +415,26 @@ const Screens = (() => {
 
   function verdict(state) {
     const r = state.lastResult;
-    const win = r.win;
+    const word = r.draw ? '引き分け' : (r.win ? '勝利' : '敗戦');
+    const cls = r.draw ? ' is-draw' : (r.win ? ' is-win' : ' is-lose');
+    let lead = '';
+    if (r.card) {
+      lead = 'このカード　' + r.card.w + '勝' + r.card.l + '敗' + (r.card.d ? r.card.d + '分' : '') +
+        (r.card.done ? (r.card.won ? '　カードを取った（勝ち点1）' : '　カードを落とした') : '　（2勝先取。まだ続く）');
+    } else if (r.kind === 'national') {
+      lead = r.replay ? '引き分け。再試合になる。' : (r.win ? (r.last ? '優勝！' : '次の回へ進む。') : 'ここで敗退。');
+    }
     UI.html('verdict-body',
-      '<div class="verdict__box' + (win ? ' is-win' : ' is-lose') + '">' +
-        '<p class="verdict__where">' + esc(r.tourName) + '　' + esc(r.round) + '</p>' +
-        '<h2 class="verdict__word">' + (win ? '勝利' : '敗戦') + '</h2>' +
+      '<div class="verdict__box' + cls + '">' +
+        '<p class="verdict__where">' + esc(r.tourName) + '</p>' +
+        '<h2 class="verdict__word">' + word + '</h2>' +
         '<p class="verdict__score">' + esc(state.team.name) + ' <b>' + r.myRuns + '</b>' +
           ' - <b>' + r.opRuns + '</b> ' + esc(r.oppName) + '</p>' +
         UI.decisionLines(r) +
         (r.cold ? '<p class="verdict__note">コールドゲーム</p>' :
-          (r.walkoff ? '<p class="verdict__note">サヨナラ</p>' : '')) +
-        (win
-          ? (r.last ? '<p class="verdict__lead">' + esc(r.tourName) + '　優勝。</p>'
-                    : '<p class="verdict__lead">次の試合へ進む。</p>')
-          : '<p class="verdict__lead">オフシーズンへ。</p>') +
+          (r.walkoff ? '<p class="verdict__note">サヨナラ</p>' : (r.innings > 9 ? '<p class="verdict__note">延長' + r.innings + '回</p>' : ''))) +
+        (lead ? '<p class="verdict__lead">' + esc(lead) + '</p>' : '') +
+        ((r.injuries || []).length ? '<p class="verdict__note">負傷：' + r.injuries.map((x) => esc(x.name) + '（' + esc(x.text) + '・' + x.games + '試合）').join('、') + '</p>' : '') +
       '</div>');
     UI.show('screen-verdict');
   }
@@ -495,112 +491,8 @@ const Screens = (() => {
     UI.show('screen-growth');
   }
 
-  /* ---------- 次の試合のお知らせ ---------- */
+  /* ---------- 優勝の演出（強奪高校野球の champ をそのまま使う） ---------- */
 
-  function nextUp(state) {
-    const r = Tournament.currentRound(state.tour);
-    const label = state.tour.kind === 'national' ? state.settings.nationalName : '地方大会';
-    UI.html('nextup-body',
-      '<p class="nextup__eyebrow">次の試合</p>' +
-      '<h2 class="nextup__title">' + esc(label) + '　' + esc(r.name) + '</h2>' +
-      '<p class="nextup__vs">' + esc(state.team.name) + '　対　<b>' + esc(r.schoolName) + '</b></p>');
-    UI.show('screen-nextup');
-  }
-
-  /* ---------- 引き抜き ---------- */
-
-  function poachWin(state, onTake, onSkip) {
-    let picked = null;
-    UI.el('poach-title').textContent = '引き抜き';
-    UI.el('poach-lead').textContent =
-      esc(state.opponent.name) + 'から1人、自校に引き抜けます。選手を選んでから下のボタンを押してください。' +
-      '引き抜くと、同じ区分（野手／投手）の部員を1人放出します。';
-    UI.html('poach-body',
-      '<h3 class="sub">' + esc(state.opponent.name) + '　野手</h3><div id="poach-bat"></div>' +
-      '<h3 class="sub">' + esc(state.opponent.name) + '　投手</h3><div id="poach-pit"></div>');
-
-    /* 決勝のあとには次の試合が無いので、そのときだけ言い方を変える */
-    const more = state.tour.index < state.tour.rounds.length - 1;
-    const ok = UI.el('btn-poach-ok');
-    const skip = UI.el('btn-poach-skip');
-    ok.textContent = more ? '引き抜いて次の試合へ' : '引き抜いて次へ';
-    ok.hidden = false;
-    ok.disabled = true;
-    skip.hidden = false;
-    skip.textContent = more ? '引き抜かず次の試合へ' : '引き抜かず次へ';
-
-    const body = UI.el('poach-body');
-    const choose = (pid) => {
-      body.querySelectorAll('tr.prow').forEach((x) => x.classList.remove('is-picked'));
-      body.querySelectorAll('tr.prow[data-pid="' + pid + '"]').forEach((x) => x.classList.add('is-picked'));
-      picked = Team.find(state.opponent, pid);
-      ok.disabled = !picked;
-      if (picked) UI.el('poach-lead').textContent =
-        picked.name + '（' + picked.grade + '年・' +
-        (picked.kind === 'pitcher' ? '投手' : posName(picked.pos)) + '）を引き抜きます。';
-    };
-    UI.rosterPanel(UI.el('poach-bat'), state.opponent.batters,
-      { team: state.opponent, onRow: choose, nameLink: true, nameLinkRename: false });
-    UI.rosterPanel(UI.el('poach-pit'), state.opponent.pitchers,
-      { team: state.opponent, onRow: choose, nameLink: true, nameLinkRename: false });
-    ok.onclick = () => { if (picked) onTake(picked); };
-    skip.onclick = onSkip;
-    UI.show('screen-poach');
-  }
-
-  /** 引き抜いた選手と入れ替えに出す部員を選ぶ */
-  function poachRelease(state, incoming, onRelease, onCancel) {
-    let picked = null;
-    UI.el('poach-title').textContent = esc(incoming.name) + ' を迎える';
-    UI.el('poach-lead').textContent = '放出する' + (incoming.kind === 'pitcher' ? '投手' : '野手') + 'を1人選んでください。';
-    const own = incoming.kind === 'pitcher' ? state.team.pitchers : state.team.batters;
-    UI.html('poach-body',
-      '<div class="incoming">' + UI.playerDetail(incoming, { rename: false }) + '</div>' +
-      '<h3 class="sub">放出する選手を選ぶ</h3><div id="poach-own"></div>');
-
-    const more = state.tour.index < state.tour.rounds.length - 1;
-    const ok = UI.el('btn-poach-ok');
-    const skip = UI.el('btn-poach-skip');
-    ok.textContent = more ? '放出して次の試合へ' : '放出して次へ';
-    ok.hidden = false;
-    ok.disabled = true;
-    skip.hidden = false;
-    skip.textContent = '選び直す';
-
-    const body = UI.el('poach-body');
-    UI.rosterPanel(UI.el('poach-own'), own, {
-      team: state.team,
-      nameLink: true,
-      onRow: (pid) => {
-        body.querySelectorAll('tr.prow').forEach((x) => x.classList.remove('is-picked'));
-        body.querySelectorAll('tr.prow[data-pid="' + pid + '"]').forEach((x) => x.classList.add('is-picked'));
-        picked = Team.find(state.team, pid);
-        ok.disabled = !picked;
-        if (picked) UI.el('poach-lead').textContent =
-          picked.name + '（' + UI.roleText(state.team, picked) + '）を放出します。';
-      },
-    });
-    ok.onclick = () => { if (picked) onRelease(picked); };
-    skip.onclick = onCancel;
-    UI.show('screen-poach');
-  }
-
-  /* ---------- 全国優勝 ---------- */
-
-  /** その大会の戦いぶりを短くまとめる */
-  function tourLine(state) {
-    const t = state.tour;
-    const games = (t && t.games) || 0;
-    const rf = (t && t.runsFor) || 0, ra = (t && t.runsAgainst) || 0;
-    const r = state.lastResult;
-    const parts = [];
-    if (games) parts.push(games + '戦全勝');
-    if (r) parts.push('決勝 ' + r.myRuns + '−' + r.opRuns + '（' + esc(r.oppName) + '）');
-    if (games) parts.push('1試合平均 ' + (rf / games).toFixed(1) + '得点 ' + (ra / games).toFixed(1) + '失点');
-    return parts.join('　');
-  }
-
-  /** 活躍した3人。大会成績の良い順 */
   function tourStars(t) {
     const score = (p) => p.kind === 'pitcher'
       ? (p.tour.outs || 0) / 3 * 1.1 + (p.tour.so || 0) * 0.3 - (p.tour.er || 0) * 0.8
@@ -612,140 +504,30 @@ const Screens = (() => {
     return '<ul class="champ__stars">' + tourStars(t).map((p) => {
       const s = p.tour;
       const line = p.kind === 'pitcher'
-        ? Math.floor((s.outs || 0) / 3) + '回 ' + (s.er || 0) + '失点 ' + (s.so || 0) + '奪三振'
-        : (s.h || 0) + '安打' + (s.hr ? ' ' + s.hr + '本塁打' : '') + ' ' + (s.rbi || 0) + '打点';
+        ? Math.floor((s.outs || 0) / 3) + '回 ' + (s.er || 0) + '失点 ' + (s.so || 0) + '奪三振 ' + (s.w || 0) + '勝'
+        : (s.h || 0) + '安打' + (s.hr ? ' ' + s.hr + '本塁打' : '') + ' ' + (s.rbi || 0) + '打点 打率' + UI.avg(s.h, s.ab);
       return '<li><b>' + esc(p.name) + '</b>' +
         '<span>' + p.grade + '年・' + (p.kind === 'pitcher' ? '投手' : posName(p.pos)) + '</span>' +
         '<span class="champ__stat">' + line + '</span></li>';
     }).join('') + '</ul>';
   }
 
-  /** 地方大会を勝ち切ったとき。ここから全国大会へ進む */
-  function localWin(state) {
-    const t = state.team;
-    UI.html('localwin-body',
-      '<div class="champ champ--local">' +
-        '<p class="champ__eyebrow">' + state.year + '年目</p>' +
-        '<h2 class="champ__title">地方大会 優勝</h2>' +
-        '<p class="champ__school">' + esc(t.name) + '</p>' +
-        '<div class="champ__rays" aria-hidden="true"></div>' +
-        '<p class="champ__record">' + tourLine(state) + '</p>' +
-        '<p class="champ__lead">' + esc(t.name) + 'が県の代表として、' +
-          esc(state.settings.nationalName) + 'へ駒を進めた。</p>' +
-        starList(t) +
-      '</div>');
-    UI.show('screen-localwin');
-  }
-
-  function champion(state) {
-    const t = state.team;
-    UI.html('champion-body',
-      '<div class="champ">' +
-        '<p class="champ__eyebrow">' + state.year + '年目</p>' +
-        '<h2 class="champ__title">' + esc(state.settings.nationalName) + ' 優勝</h2>' +
-        '<p class="champ__school">' + esc(t.name) + '</p>' +
-        '<div class="champ__rays" aria-hidden="true"></div>' +
-        '<p class="champ__record">' + tourLine(state) + '</p>' +
-        '<p class="champ__lead">深紅の大優勝旗が、' + esc(t.name) + 'へ。</p>' +
-        starList(t) +
-        '<p class="champ__note">' + state.year + '年目の夏、日本一。</p>' +
-      '</div>');
-    UI.show('screen-champion');
-  }
-
-  /* ---------- オフシーズン ---------- */
-
-  function offseason(state, retired) {
-    UI.el('off-title').textContent = state.year + '年目　オフシーズン';
-    const cards = retired.length
-      ? retired.map((f) => {
-        const p = f.player;
-        const isPit = p.kind === 'pitcher';
-        const abil = isPit
-          ? ['最速 ' + p.velo + 'km/h', '制球 ' + rankOf(p.control) + ' ' + p.control,
-             'スタミナ ' + rankOf(p.stamina) + ' ' + p.stamina,
-             p.pitches.map((q) => q.name + q.level).join('・')].join('　')
-          : ['ミート ' + rankOf(p.meet) + ' ' + p.meet, 'パワー ' + rankOf(p.power) + ' ' + p.power,
-             '走力 ' + rankOf(p.speed) + ' ' + p.speed, '肩 ' + rankOf(p.arm) + ' ' + p.arm,
-             '守備 ' + rankOf(p.field) + ' ' + p.field, '捕球 ' + rankOf(p.catch) + ' ' + p.catch,
-             '弾道 ' + p.traj].join('　');
-        const top = f.top.length
-          ? '<ol class="hllist">' + f.top.map((h) =>
-              '<li><span class="hl__where">' + esc(h.where) + '</span><span class="hl__line">' + esc(h.line) + '</span></li>').join('') + '</ol>'
-          : '<p class="note">目立った記録は残せませんでした。</p>';
-        return '<article class="retire' + (f.draft ? ' is-draft' : '') + '">' +
-          '<header class="retire__head">' +
-            '<h3><button type="button" class="linkbtn retire__name" data-pid="' + p.id + '">' + esc(p.name) + '</button></h3>' +
-            '<span>' + (isPit ? '投手' : posName(p.pos)) + '　' + UI.handMark(p) +
-            (p.awakened ? '　<b class="awake">覚醒</b>' : '') + '</span>' +
-            (f.draft ? '<em class="retire__draft">' + esc(f.draft.text) + '</em>' : '') + '</header>' +
-          (p.from ? '<p class="retire__from">' + p.from.year + '年目に ' + esc(p.from.school) + ' から加入</p>' : '') +
-          '<p class="retire__abil">' + esc(abil) + '</p>' +
-          (isPit ? UI.careerPitLine(p.career) : UI.careerBatLine(p.career)) +
-          '<h4 class="sub">活躍シーン ベスト3</h4>' + top +
-        '</article>';
-      }).join('')
-      : '<p class="note">今年は引退する3年生がいませんでした。</p>';
-
-    /* 負けて引き抜かれていたら、誰を取られたのかを頭に出す。
-       名前とポジションだけでは分からないので、学年も能力も通算成績も並べる */
-    const taken = state.poachedFrom && state.poachedFrom.player
-      ? (function () {
-          const q = state.poachedFrom.player;
-          return '<section class="taken">' +
-            '<h3 class="taken__title">引き抜き</h3>' +
-            '<p class="taken__lead">' + esc(state.poachedFrom.to) + 'に <b>' + esc(q.name) + '</b>（' +
-              q.grade + '年・' + (q.kind === 'pitcher' ? '投手' : posName(q.pos)) + '・' +
-              UI.handMark(q) + '）を引き抜かれた。</p>' +
-            UI.playerDetail(q, { rename: false }) +
-            '<p class="note">空いた枠には、新入生が1人多く入る。</p>' +
-          '</section>';
-        })()
-      : '';
-
-    /* キャプテンはここでも変えられる。引退して空いたときだけでなく、
-       続けられる場合でも、気が変わったら替えられるようにしておく。
-       強制はしない（このまま先へ進んでもよい） */
-    const leaving = retired.map((f) => f.player.id);
-    const cap = Team.captain(state.team);
-    const capOut = cap && leaving.indexOf(cap.id) >= 0;
-    const capPart =
-      '<h3 class="sub">キャプテン</h3>' +
-      captainBox(state.team, leaving) +
-      '<p class="note">' +
-        (!cap ? 'キャプテンが決まっていません。'
-              : (capOut ? '引退するので、新しいキャプテンを決めてください。'
-                        : '続けてもらうならこのままで構いません。気が変わったらここで変えられます。')) +
-        '学年は問いません。引退する3年生は選べません。</p>';
-
-    UI.html('off-body',
-      taken + '<p class="section-lead">3年生が引退します。名前を押すと能力を見られます。</p>' +
-      cards + capPart);
-    const body = UI.el('off-body');
-    const all = retired.map((f) => f.player).concat(
-      state.poachedFrom && state.poachedFrom.player ? [state.poachedFrom.player] : []);
-    body.querySelectorAll('.retire__name').forEach((b) =>
-      b.addEventListener('click', () => {
-        const q = all.find((x) => x.id === b.dataset.pid);
-        if (q) UI.openPlayer(q, { team: state.team, rename: false });
-      }));
-    wireCaptain(body, state.team, () => offseason(state, retired), leaving);
-    UI.show('screen-offseason');
-  }
-
-  /* ---------- 設定 ---------- */
-
-  function settings(state) {
-    UI.el('set-national').value = state.settings.nationalName;
-    UI.el('set-school').value = state.team ? state.team.name : (state.settings.schoolName || '');
-    UI.el('set-poach').checked = !!state.settings.poach;
-    UI.show('screen-settings');
+  /** 優勝の画面（リーグ優勝・日本一）。html を返す */
+  function champHtml(eyebrow, title, school, record, lead, team, note) {
+    return '<div class="champ">' +
+      '<p class="champ__eyebrow">' + esc(eyebrow) + '</p>' +
+      '<h2 class="champ__title">' + esc(title) + '</h2>' +
+      '<p class="champ__school">' + esc(school) + '</p>' +
+      '<div class="champ__rays" aria-hidden="true"></div>' +
+      (record ? '<p class="champ__record">' + record + '</p>' : '') +
+      '<p class="champ__lead">' + esc(lead) + '</p>' +
+      (team ? starList(team) : '') +
+      (note ? '<p class="champ__note">' + esc(note) + '</p>' : '') +
+    '</div>';
   }
 
   return {
-    pick, ready, training, trainingResult, opening, pregame,
-    poachWin, poachRelease, champion, offseason, settings, lineupCard, bindRows,
-    abilityLine, pitchText, verdict, growth, nextUp, trainingIntro, setOnChange,
-    localWin,
+    pick, ready, training, trainingResult, pregame, lineupCard, bindRows, captainBox, wireCaptain,
+    abilityLine, pitchText, verdict, growth, trainingIntro, setOnChange, champHtml, starList, upText,
   };
 })();

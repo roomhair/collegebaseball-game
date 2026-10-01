@@ -162,7 +162,7 @@ const Soccer = (() => {
 
   /** 自分の先発11人（{pid,name,pos,s}） */
   function mySide(state) {
-    return state.soccer.lineup.map((x) => {
+    return state.soccer.lineup.filter((x) => findP(state, x.pid)).map((x) => {
       const p = findP(state, x.pid);
       return { pid: p.id, name: p.name, pos: x.pos, s: p.soc, p };
     });
@@ -594,6 +594,7 @@ const Soccer = (() => {
     const gone = new Set(retiring(state).map((p) => p.id));
     S.players = S.players.filter((p) => !gone.has(p.id));
     S.players.forEach((p) => { p.grade++; });
+    autoLineup(state);
     state.phase = 'SOCCER_CHOICE';
     state.step = 'choice';
   }

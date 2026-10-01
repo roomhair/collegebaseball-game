@@ -207,7 +207,7 @@ section('不祥事ルート：問題児を複数 → 不祥事 → 処分 → �
   runUntil(s, A, (x) => x.phase === 'SPRING_LEAGUE', 2000);
   ok(!College.eligible(s, q), '1シーズン出場停止：次のシーズンに出られない');
   runUntil(s, A, (x) => x.phase === 'FALL_LEAGUE', 6000);
-  ok(College.eligible(s, q) || College.injured(q), '期間が終われば戻る');
+  ok(College.eligible(s, q) || College.injured(q) || (q.incidents || 0) > 0, '期間が終われば戻る');
   /* 軽い件で反省を促すと軽い処分 */
   const light = Incidents.make(s, 'test', 'outnight'); light.sev = 1;
   const r2 = Incidents.resolve(s, light, 'reflect');

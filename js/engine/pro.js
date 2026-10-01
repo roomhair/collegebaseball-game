@@ -149,11 +149,11 @@ const Pro = (() => {
     const S = state.pro.season;
     if (S.stage === 'regular') {
       if (S.day >= S.sched.length) { endRegular(state); return; }
-      prepare(state);
+      state.step = 'round';
       return;
     }
     const s = S.post;
-    if (!s.done) { prepare(state); return; }
+    if (!s.done) { state.step = 'series'; return; }
     advancePost(state);
   }
 
