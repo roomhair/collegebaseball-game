@@ -27,7 +27,7 @@ function scramble(s, mode) {
   t.lineup = lu;
 }
 const modes = ['auto', 'shift', 'worst'];
-const st = {}; modes.forEach((m) => { st[m] = [0, 0]; });
+const st = {}; modes.forEach((m) => { st[m] = [0, 0, 0, 0, 0]; });
 for (let r = 0; r < 5; r++) {
   const s0 = E.newGame(); const A = makeAuto(G, {});
   let k = 0;
@@ -39,10 +39,11 @@ for (let r = 0; r < 5; r++) {
         for (let i = 0; i < 4; i++) {
           const s = JSON.parse(JSON.stringify(s0)); scramble(s, m); s.liveGame = null;
           E.autoGame(s); const x = st[m]; if (!s.lastResult.draw) { x[0]++; x[1] += s.lastResult.win ? 1 : 0; }
+          x[2]++; x[3] += s.lastResult.opRuns; x[4] += s.lastResult.myRuns;
         }
       });
     }
     A.step(s0);
   }
 }
-modes.forEach((m) => { const x = st[m]; console.log('3部', m, 'n', x[0], 'win%', (x[1] / x[0]).toFixed(3)); });
+modes.forEach((m) => { const x = st[m]; console.log('3部', m, 'n', x[0], '勝率', (x[1] / x[0]).toFixed(3), '平均失点', (x[3] / x[2]).toFixed(1), '平均得点', (x[4] / x[2]).toFixed(1)); });
