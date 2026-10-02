@@ -152,6 +152,17 @@ const College = (() => {
       morale: t.morale,
     };
     let rebuilt = false;
+    /* 出られない選手が抜けたところだけ、控えから埋める（監督の組んだ残りの並びはそのまま）。
+       半分以上崩れているときだけ、まるごとおまかせで組み直す */
+    if (view.lineup.length < 9 && view.lineup.length >= 5 && okB.length >= 9) {
+      const have = new Set(view.lineup.map((sl) => sl.pos));
+      LINEUP_POSITIONS.filter((k) => !have.has(k)).forEach((k) => {
+        const used = new Set(view.lineup.map((sl) => sl.pid));
+        const bench = okB.filter((p) => !used.has(p.id));
+        const best = bench.sort((a, b) => (Team.defScore(b, k) + Player.rating(b) * 0.25) - (Team.defScore(a, k) + Player.rating(a) * 0.25))[0];
+        if (best) view.lineup.push({ pid: best.id, pos: k });
+      });
+    }
     if (view.lineup.length < 9) { Team.autoLineup(view); rebuilt = true; }
     okP.forEach((p) => { if (view.rotation.indexOf(p.id) < 0) view.rotation.push(p.id); });
     view.rebuilt = rebuilt;

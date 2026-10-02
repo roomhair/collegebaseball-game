@@ -108,7 +108,7 @@ const Player = (() => {
 
   function aptPenalty(letter) {
     const idx = APT_LETTERS.indexOf(letter);
-    return idx < 0 ? 30 : [0, 4, 9, 15, 21, 28, 36][idx];
+    return idx < 0 ? 30 : [0, 4, 10, 18, 28, 40, 52][idx];
   }
 
   /* ---------- 利き手 ----------
