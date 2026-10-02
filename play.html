@@ -1244,7 +1244,9 @@ body { background: var(--bg); color: var(--ink); }
 .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 
 /* ---------- スカウト ---------- */
-.scoutbar { display: flex; flex-wrap: wrap; gap: 6px 18px; border: 1.5px solid var(--navy); padding: 8px 12px; margin: 8px 0; font-variant-numeric: tabular-nums; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px); background: var(--bg); z-index: 5; }
+.scoutbar { display: flex; flex-wrap: wrap; gap: 6px 18px; border: 1.5px solid var(--navy); padding: 8px 12px; margin: 8px 0; font-variant-numeric: tabular-nums; position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--statusbar-h, 0px)); background: var(--bg); z-index: 20; box-shadow: 0 2px 0 var(--bg); }
+.scoutbar small { color: var(--ink-mute); }
+.scoutbar__sp { color: var(--gold); }
 .scoutlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .scout { border: 1px solid var(--line); padding: 12px; background: var(--panel); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .scout.is-offered { border: 2px solid var(--accent); }
@@ -1338,7 +1340,8 @@ body { background: var(--bg); color: var(--ink); }
 @media (max-width: 520px) {
   .statusbar .chip { font-size: 13px; }
   .scoutlist { grid-template-columns: 1fr; }
-  .scoutbar { position: static; }
+  .scoutbar { gap: 2px 12px; padding: 5px 10px; font-size: 13px; margin: 6px 0; }
+  .scoutbar__extra { display: none; }
   .slots { grid-template-columns: 1fr; }
 }
 [hidden] { display: none !important; }
@@ -12347,13 +12350,14 @@ const CS = (() => {
       }).join('') + '</ul>' : '<p class="note">まだ誰にも推薦枠を出していません。</p>') +
     '</section>';
 
+    const spc = sc.special ? sc.cands.find((c) => c.id === sc.special) : null;
     show(
       '<h2 class="section-title">新入生スカウト</h2>' +
       '<div class="scoutbar">' +
-        '<span>視察できる回数 <b>' + sc.points + '</b> / ' + Scouting.POINTS + '</span>' +
-        '<span>推薦枠 <b>' + sc.offers + '</b> / ' + CONFIG.ROSTER.REC_SLOTS + '</span>' +
-        '<span>特待生 <b>' + (sc.special ? 1 : 0) + '</b> / 1</span>' +
-        '<span>大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
+        '<span>視察 残り <b>' + sc.points + '</b>回<small> / ' + Scouting.POINTS + '</small></span>' +
+        '<span>推薦枠 <b>' + sc.offers + '</b>人<small> / ' + CONFIG.ROSTER.REC_SLOTS + '</small></span>' +
+        '<span>特待生 ' + (spc ? '<b class="scoutbar__sp">選択済み</b>（' + esc(spc.player.name) + '）' : '<b>まだ</b>') + '</span>' +
+        '<span class="scoutbar__extra">大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
       '</div>' +
       pickedHtml +
       '<h3 class="sub">候補の選手（' + sc.cands.length + '人）</h3>' +
@@ -12387,7 +12391,10 @@ const CS = (() => {
           '<em class="retire__draft">' + esc(pathText) + '</em></header>' +
         '<p class="retire__abil">' + (isPit
           ? '最速 ' + p.velo + 'km/h　制球 ' + rankOf(p.control) + ' ' + p.control + '　スタミナ ' + rankOf(p.stamina) + ' ' + p.stamina
-          : 'ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
+          : '弾道 ' + p.traj + '　ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
+        (isPit ? '<p class="retire__abil retire__pitches">変化球　' + (p.pitches && p.pitches.length
+          ? p.pitches.map((q) => esc(q.name) + ' <b>' + q.level + '</b>').join('　')
+          : 'なし') + '</p>' : '') +
         (isPit ? UI.careerPitLine(p.career) : UI.careerBatLine(p.career)) +
         seasonsTable +
         ((p.titles || p.japan) ? '<p class="retire__titles">リーグ優勝 ' + (p.titles || 0) + '回' + (p.japan ? '　日本一 ' + p.japan + '回' : '') + '</p>' : '') +
@@ -13635,6 +13642,13 @@ const App = (() => {
   function boot() {
     UI.init();
     GameScreen.init();
+    /* 上の帯（いまどこにいるか）の高さを覚えておき、スカウトの残り回数などの欄をその真下に貼り付ける。
+       スマホでは帯が2段になるので、決め打ちにせず実際の高さを測る */
+    const bar = UI.el('statusbar');
+    const setH = () => { document.documentElement.style.setProperty('--statusbar-h', (bar.hidden ? 0 : bar.offsetHeight) + 'px'); };
+    setH();
+    if (window.ResizeObserver) new ResizeObserver(setH).observe(bar);
+    window.addEventListener('resize', setH);
     const on = (id, fn) => { const n = UI.el(id); if (n) n.addEventListener('click', fn); };
 
     on('btn-home', () => { if (state && state.step === 'game') { toast('試合中はトップに戻れません'); return; } save(); showSlots(); });

@@ -553,6 +553,13 @@ const App = (() => {
   function boot() {
     UI.init();
     GameScreen.init();
+    /* 上の帯（いまどこにいるか）の高さを覚えておき、スカウトの残り回数などの欄をその真下に貼り付ける。
+       スマホでは帯が2段になるので、決め打ちにせず実際の高さを測る */
+    const bar = UI.el('statusbar');
+    const setH = () => { document.documentElement.style.setProperty('--statusbar-h', (bar.hidden ? 0 : bar.offsetHeight) + 'px'); };
+    setH();
+    if (window.ResizeObserver) new ResizeObserver(setH).observe(bar);
+    window.addEventListener('resize', setH);
     const on = (id, fn) => { const n = UI.el(id); if (n) n.addEventListener('click', fn); };
 
     on('btn-home', () => { if (state && state.step === 'game') { toast('試合中はトップに戻れません'); return; } save(); showSlots(); });

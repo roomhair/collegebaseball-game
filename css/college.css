@@ -109,7 +109,9 @@ body { background: var(--bg); color: var(--ink); }
 .choices { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 
 /* ---------- スカウト ---------- */
-.scoutbar { display: flex; flex-wrap: wrap; gap: 6px 18px; border: 1.5px solid var(--navy); padding: 8px 12px; margin: 8px 0; font-variant-numeric: tabular-nums; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px); background: var(--bg); z-index: 5; }
+.scoutbar { display: flex; flex-wrap: wrap; gap: 6px 18px; border: 1.5px solid var(--navy); padding: 8px 12px; margin: 8px 0; font-variant-numeric: tabular-nums; position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--statusbar-h, 0px)); background: var(--bg); z-index: 20; box-shadow: 0 2px 0 var(--bg); }
+.scoutbar small { color: var(--ink-mute); }
+.scoutbar__sp { color: var(--gold); }
 .scoutlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .scout { border: 1px solid var(--line); padding: 12px; background: var(--panel); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .scout.is-offered { border: 2px solid var(--accent); }
@@ -203,7 +205,8 @@ body { background: var(--bg); color: var(--ink); }
 @media (max-width: 520px) {
   .statusbar .chip { font-size: 13px; }
   .scoutlist { grid-template-columns: 1fr; }
-  .scoutbar { position: static; }
+  .scoutbar { gap: 2px 12px; padding: 5px 10px; font-size: 13px; margin: 6px 0; }
+  .scoutbar__extra { display: none; }
   .slots { grid-template-columns: 1fr; }
 }
 [hidden] { display: none !important; }
