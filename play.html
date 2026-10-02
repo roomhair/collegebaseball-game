@@ -2826,17 +2826,17 @@ const Sim = (() => {
   function stuffOf(p) { return C(veloScore(p) * 0.68 + Player.breakScore(p) * 0.32, 0, 1); }
 
   /* 大学版：慣れない守備位置に就いた選手は、守りだけでなく打席でも
-     集中しきれない（適性G＝まったく守ったことのない位置で、ミート・パワー −17 くらい）。
+     集中しきれない（適性G＝まったく守ったことのない位置で、ミート・パワー −26 くらい）。
      捕手は配球・捕球の要なので、捕手に向かない選手が座ると投手の球威・制球がまるごと落ちる。
      「オーダーをデタラメにしても勝ててしまう」をなくすため */
   function misfitBat(p, pos) {
     if (!pos || pos === 'DH' || !p || p.kind === 'pitcher' && pos === 'P') return 0;
-    if (p.throws === 'L' && Player.RIGHT_ONLY.indexOf(pos) >= 0) return 17;
-    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G') / 3;
+    if (p.throws === 'L' && Player.RIGHT_ONLY.indexOf(pos) >= 0) return 26;
+    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G') / 2;
   }
   function catcherDrag(c) {
-    if (!c) return 30;
-    return C((58 - Team.defScore(c, 'C')) / 58, 0, 1) * 30;
+    if (!c) return 42;
+    return C((58 - Team.defScore(c, 'C')) / 58, 0, 1) * 42;
   }
 
   /** 守備陣のまとまり（0〜1）。安打になりにくさに効く */
@@ -3009,7 +3009,7 @@ const Sim = (() => {
       const fielder = defenders ? defenders[spot] : null;
       const eff = fielder ? Team.defScore(fielder, spot) : defRating * 100;
       const base = type === 'GB' ? 0.045 : 0.018;
-      const pE = C(base + (52 - eff) / 100 * (eff < 52 ? 0.40 : 0.24), 0.004, 0.30);
+      const pE = C(base + (52 - eff) / 100 * (eff < 52 ? 0.65 : 0.24), 0.004, 0.40);
       if (RNG.chance(pE)) {
         return { code: 'E', text: posShort(spot) + '失', out: 0, spot, by: fielder ? fielder.id : null };
       }
@@ -3019,11 +3019,14 @@ const Sim = (() => {
     const babip = C(
       0.300 + 0.30 * (contact - stuff) + 0.07 * (pw - 0.5) +
       0.05 * (bat.speed / 100 - 0.5) - 0.28 * (defRating - 0.45) +
-      0.35 * Math.max(0, 0.38 - defRating),   // 大学版：守備が崩れていると、さらに抜ける
+      0.80 * Math.max(0, 0.42 - defRating),   // 大学版：守備が崩れていると、さらに抜ける
       0.09, 0.58
     );
     const byType = { GB: 0.235, LD: 0.660, FB: 0.215, PU: 0.020 }[type];
-    const pHit = C(byType * (babip / 0.30), 0.01, 0.92);
+    /* 大学版：打球が飛んだ先の野手が、その位置に慣れていないほど抜ける（守備位置のミスを重くする） */
+    const atSpot = spot !== 'P' && defenders && defenders[spot] ? Team.defScore(defenders[spot], spot) : 50;
+    const misplay = 1 + 2.2 * Math.max(0, 46 - atSpot) / 46;
+    const pHit = C(byType * (babip / 0.30) * misplay, 0.01, 0.92);
 
     if (RNG.chance(pHit)) {
       /* 長打になるか。フライとライナーのほうが伸びる */
@@ -3038,6 +3041,8 @@ const Sim = (() => {
       } else if (type === 'GB') {
         kind = RNG.chance(0.04 + sp * 0.03) ? '2B' : '1B';
       }
+      /* 慣れない外野手は打球の目測を誤り、単打が長打になる */
+      if (kind === '1B' && isOF && atSpot < 40 && RNG.chance((40 - atSpot) / 40 * 0.6)) kind = '2B';
       /* 長打の方向は外野で言う */
       const ofKey = bat.bats === 'L' ? mirror(OF_BY_ZONE[zone]) : OF_BY_ZONE[zone];
       const mark = kind === '1B' ? '安' : (kind === '2B' ? '二' : '三');
@@ -6765,8 +6770,9 @@ const Scouting = (() => {
       if (dest.kind === 'us') {
         p.route = sc.special === c.id ? '特待生' : '推薦';
         joined.push(p);
-      } else if (c.offered || c.tier === 'S' || c.tier === 'A') {
-        lost.push({ name: p.name, tier: c.tier, kind: p.kind, pos: p.pos, text: dest.text, offered: c.offered });
+      } else if (c.offered) {
+        /* 他の進路を選んだ選手は、推薦枠（特待生を含む）を出した選手だけを全員知らせる */
+        lost.push({ name: p.name, tier: c.tier, kind: p.kind, pos: p.pos, text: dest.text, offered: true, special: sc.special === c.id });
       }
     });
     sc.resolved = true;
@@ -9639,15 +9645,16 @@ const UI = (() => {
     return '<span class="g5 g5-' + letter + '">' + letter + '</span>';
   }
 
-  /** 一覧の右側に足す列（成長力・調子・疲労・素行・性格・状態） */
+  /** 一覧の右側に足す列（成長力・調子・疲労・性格・状態）。
+     素行は内部では持っているが、A〜Eの格付けとしては見せない。
+     opts.noCond：チーム作りの画面など、まだ試合をしていないところでは調子・疲労を出さない */
   function collegeCells(p, opts) {
     const st = (opts.state && typeof College !== 'undefined') ? College.statusText(opts.state, p) : '';
     const cond = p.condition || 0;
-    const conductKnown = p.known !== false;
     return '<td class="c">' + (p.growthRate != null ? gradeSpan(Persona.grade5(p.growthRate)) : '―') + '</td>' +
-      '<td class="c cond cond' + cond + '" title="' + Persona.condLabel(cond) + '">' + Persona.condMark(cond) + '</td>' +
-      '<td class="c fat' + (p.fatigue >= 45 ? ' is-tired' : '') + '">' + Math.round(p.fatigue || 0) + '</td>' +
-      '<td class="c">' + (p.persona ? (conductKnown ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？') : '―') + '</td>' +
+      (opts.noCond ? '' :
+        '<td class="c cond cond' + cond + '" title="' + Persona.condLabel(cond) + '">' + Persona.condMark(cond) + '</td>' +
+        '<td class="c fat' + (p.fatigue >= 45 ? ' is-tired' : '') + '">' + Math.round(p.fatigue || 0) + '</td>') +
       '<td class="t-persona">' + esc(p.persona ? (p.known ? Persona.label(p.persona.type) : '不明') : '―') + '</td>' +
       '<td class="c status">' + (st ? '<b class="stbad">' + esc(st) + '</b>' : '') +
         (p.persona && Persona.isProblem(p) && p.known ? '<i class="warnmark" title="素行に注意">要注意</i>' : '') + '</td>';
@@ -9659,14 +9666,14 @@ const UI = (() => {
     const known = p.known;
     const rows = [
       ['性格', known ? Persona.label(p.persona.type) : '（' + esc(p.rumorText || '人柄はまだよく分からない') + '）'],
-      ['素行', known ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？'],
       ['キャプテンシー', gradeSpan(Persona.grade5(p.persona.lead))],
       ['メンタル', known ? gradeSpan(Persona.grade5(p.persona.mental)) : '？'],
       ['成長力', gradeSpan(Persona.grade5(p.growthRate))],
       ['将来性', '<span class="rank rank-' + rankOf(p.potential) + '">' + rankOf(p.potential) + '</span>'],
+    ].concat(opts && opts.noCond ? [] : [
       ['調子', Persona.condLabel(p.condition || 0) + ' ' + Persona.condMark(p.condition || 0)],
       ['疲労', Persona.fatigueLabel(p.fatigue || 0) + '（' + Math.round(p.fatigue || 0) + '）'],
-    ];
+    ]);
     const st = opts && opts.state && typeof College !== 'undefined' ? College.statusText(opts.state, p) : '';
     const prof = [
       p.height ? p.height + 'cm・' + p.weight + 'kg' : '',
@@ -9751,7 +9758,7 @@ const UI = (() => {
       ? '<th>球速</th><th>制球</th><th>スタ</th><th class="t-break">変化球</th>'
       : '<th>弾道</th><th>ミート</th><th>パワー</th><th>走力</th><th>肩力</th><th>守備</th><th>捕球</th>';
     const roleHead = opts.team ? '<th>いまの役割</th>' : '';
-    const colHead = opts.college ? '<th>成長</th><th>調子</th><th>疲労</th><th>素行</th><th class="t-persona">性格</th><th>状態</th>' : '';
+    const colHead = opts.college ? '<th>成長</th>' + (opts.noCond ? '' : '<th>調子</th><th>疲労</th>') + '<th class="t-persona">性格</th><th>状態</th>' : '';
     return '<div class="tablewrap"><table class="roster">' +
       '<thead><tr><th>年</th><th class="nm">選手</th>' + roleHead +
       (isPit ? '' : '<th>位置</th>') + '<th class="hand">利き</th>' + head + colHead + '</tr></thead>' +
@@ -10439,7 +10446,7 @@ const Screens = (() => {
             (s.problems ? '　<span class="dataset__warn">素行に不安：' + s.problems + '人</span>' : '') + '</p>' +
           '<button type="button" class="btn btn--primary dataset__pick" data-i="' + i + '">' + esc(pickLabel) + '</button>' +
         '</header>' +
-        UI.rosterTable(players, { college: true }) +
+        UI.rosterTable(players, { college: true, noCond: true }) +
       '</article>';
     }).join('');
     UI.html('pick-list', html);
@@ -10450,7 +10457,7 @@ const Screens = (() => {
     bindRows(list, (pid) => {
       for (const set of opt.sets) {
         const p = set.find((x) => x.id === pid);
-        if (p) { UI.openPlayer(p, { rename: false }); return; }
+        if (p) { UI.openPlayer(p, { rename: false, noCond: true }); return; }
       }
     });
     UI.show('screen-pick');
@@ -10470,7 +10477,7 @@ const Screens = (() => {
       '<p class="section-lead">' + esc(t.name) + '　部員' + Team.all(t).length + '人　' +
         'チーム力 <b>' + Team.strength(t) + '</b>　' + esc(state.names.league) + ' 2部からのスタート</p>' +
       '<p class="note">キャプテンを決めると特訓に進めます。キャプテンシーの高い選手ほどチームをまとめ、不祥事を起こしにくくします。' +
-        '選手を押すと、性格・素行・成長力などが見られます。名前もそこで変えられます。</p>' +
+        '選手を押すと、性格・成長力などが見られます。名前もそこで変えられます。</p>' +
       captainBox(t) +
       lineupCard(t) +
       '<h3 class="sub">野手</h3><div id="ready-bat"></div>' +
@@ -10479,10 +10486,10 @@ const Screens = (() => {
     const body = UI.el('ready-body');
     const open = (pid) => {
       const p = Team.find(t, pid);
-      if (p) UI.openPlayer(p, { team: t, state, onRename: () => { onChange(); ready(state); } });
+      if (p) UI.openPlayer(p, { team: t, state, noCond: true, onRename: () => { onChange(); ready(state); } });
     };
-    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open, college: true, state });
-    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open, college: true, state });
+    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open, college: true, state, noCond: true });
+    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open, college: true, state, noCond: true });
     bindRows(body, open);
     wireCaptain(body, t, () => ready(state));
     gateTraining(t);
@@ -12321,7 +12328,6 @@ const CS = (() => {
         '<p class="scout__flags">' + flags + '</p>' +
         '<dl class="scout__grid">' +
           '<div><dt>性格</dt><dd>' + esc(Scouting.personalityText(c)) + '</dd></div>' +
-          '<div><dt>素行</dt><dd>' + esc(Scouting.conductText(c)) + '</dd></div>' +
           '<div><dt>成長力</dt><dd>' + esc(Scouting.growthText(c)) + '</dd></div>' +
           '<div><dt>将来性</dt><dd>' + esc(Scouting.futureText(c)) + '</dd></div>' +
         '</dl>' +
@@ -12450,6 +12456,11 @@ const CS = (() => {
     const a = state.arrivals || { joined: [], lost: [] };
     const joined = a.joined.map((id) => Team.find(state.team, id)).filter(Boolean);
     const general = (a.general || []).map((id) => Team.find(state.team, id)).filter(Boolean);
+    /* 自校に来た選手は特待生か推薦枠かで分け、他の進路を選んだ選手は推薦枠を出した選手だけ */
+    const spJoined = joined.filter((p) => p.route === '特待生');
+    const recJoined = joined.filter((p) => p.route !== '特待生');
+    const lost = (a.lost || []).filter((x) => x.offered);
+    const spLost = lost.some((x) => x.special);
     /* 野手と投手は列が違うので、表を分ける */
     const split = (list) => {
       const bat = list.filter((p) => p.kind !== 'pitcher'), pit = list.filter((p) => p.kind === 'pitcher');
@@ -12458,11 +12469,16 @@ const CS = (() => {
     };
     show(
       '<h2 class="section-title">' + state.year + '年度　新入生入部</h2>' +
-      '<h3 class="sub">推薦で入部した新入生（' + joined.length + '人）</h3>' +
-      (joined.length ? split(joined) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
+      '<h3 class="sub">特待生で入部した新入生（' + spJoined.length + '人）</h3>' +
+      (spJoined.length ? split(spJoined) : '<p class="note">' + (spLost ? '特待生にした選手は、他の進路を選びました。' : '特待生は出していません。') + '</p>') +
+      '<h3 class="sub">推薦枠で入部した新入生（' + recJoined.length + '人）</h3>' +
+      (recJoined.length ? split(recJoined) : '<p class="note">推薦枠で来てくれた選手はいませんでした。</p>') +
       (a.over > 0 ? '<p class="note">1学年の上限のため、' + a.over + '人は受け入れられませんでした。</p>' : '') +
-      (a.lost.length ? '<h3 class="sub">他の進路を選んだ有望選手</h3><ul class="lostlist">' + a.lost.map((x) =>
-        '<li><b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '・' + x.tier + '）' + (x.offered ? '<i class="tag">推薦枠を提示</i>' : '') + ' → ' + esc(x.text) + '</li>').join('') + '</ul>' : '') +
+      '<h3 class="sub">推薦枠を出したが、他の進路を選んだ選手（' + lost.length + '人）</h3>' +
+      (lost.length ? '<ul class="lostlist">' + lost.map((x) =>
+        '<li>' + (x.special ? '<b class="tag tag--gold">特待生</b>' : '<span class="tag">推薦枠</span>') +
+        ' <b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '）　→ ' + esc(x.text) + '</li>').join('') + '</ul>'
+        : '<p class="note">推薦枠を出した選手は全員入部しました。</p>') +
       '<h3 class="sub">一般入試で入部した新入生（' + general.length + '人）</h3>' +
       (general.length ? split(general) : '<p class="note">部員が足りているため、一般入試からの入部はありませんでした。</p>') +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">春の特訓へ</button></div>',

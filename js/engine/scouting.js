@@ -228,8 +228,9 @@ const Scouting = (() => {
       if (dest.kind === 'us') {
         p.route = sc.special === c.id ? '特待生' : '推薦';
         joined.push(p);
-      } else if (c.offered || c.tier === 'S' || c.tier === 'A') {
-        lost.push({ name: p.name, tier: c.tier, kind: p.kind, pos: p.pos, text: dest.text, offered: c.offered });
+      } else if (c.offered) {
+        /* 他の進路を選んだ選手は、推薦枠（特待生を含む）を出した選手だけを全員知らせる */
+        lost.push({ name: p.name, tier: c.tier, kind: p.kind, pos: p.pos, text: dest.text, offered: true, special: sc.special === c.id });
       }
     });
     sc.resolved = true;

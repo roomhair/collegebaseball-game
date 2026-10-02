@@ -40,7 +40,7 @@ const Screens = (() => {
             (s.problems ? '　<span class="dataset__warn">素行に不安：' + s.problems + '人</span>' : '') + '</p>' +
           '<button type="button" class="btn btn--primary dataset__pick" data-i="' + i + '">' + esc(pickLabel) + '</button>' +
         '</header>' +
-        UI.rosterTable(players, { college: true }) +
+        UI.rosterTable(players, { college: true, noCond: true }) +
       '</article>';
     }).join('');
     UI.html('pick-list', html);
@@ -51,7 +51,7 @@ const Screens = (() => {
     bindRows(list, (pid) => {
       for (const set of opt.sets) {
         const p = set.find((x) => x.id === pid);
-        if (p) { UI.openPlayer(p, { rename: false }); return; }
+        if (p) { UI.openPlayer(p, { rename: false, noCond: true }); return; }
       }
     });
     UI.show('screen-pick');
@@ -71,7 +71,7 @@ const Screens = (() => {
       '<p class="section-lead">' + esc(t.name) + '　部員' + Team.all(t).length + '人　' +
         'チーム力 <b>' + Team.strength(t) + '</b>　' + esc(state.names.league) + ' 2部からのスタート</p>' +
       '<p class="note">キャプテンを決めると特訓に進めます。キャプテンシーの高い選手ほどチームをまとめ、不祥事を起こしにくくします。' +
-        '選手を押すと、性格・素行・成長力などが見られます。名前もそこで変えられます。</p>' +
+        '選手を押すと、性格・成長力などが見られます。名前もそこで変えられます。</p>' +
       captainBox(t) +
       lineupCard(t) +
       '<h3 class="sub">野手</h3><div id="ready-bat"></div>' +
@@ -80,10 +80,10 @@ const Screens = (() => {
     const body = UI.el('ready-body');
     const open = (pid) => {
       const p = Team.find(t, pid);
-      if (p) UI.openPlayer(p, { team: t, state, onRename: () => { onChange(); ready(state); } });
+      if (p) UI.openPlayer(p, { team: t, state, noCond: true, onRename: () => { onChange(); ready(state); } });
     };
-    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open, college: true, state });
-    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open, college: true, state });
+    UI.rosterPanel(UI.el('ready-bat'), t.batters, { team: t, onRow: open, college: true, state, noCond: true });
+    UI.rosterPanel(UI.el('ready-pit'), t.pitchers, { team: t, onRow: open, college: true, state, noCond: true });
     bindRows(body, open);
     wireCaptain(body, t, () => ready(state));
     gateTraining(t);
