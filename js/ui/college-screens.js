@@ -378,7 +378,6 @@ const CS = (() => {
         '<p class="scout__flags">' + flags + '</p>' +
         '<dl class="scout__grid">' +
           '<div><dt>性格</dt><dd>' + esc(Scouting.personalityText(c)) + '</dd></div>' +
-          '<div><dt>素行</dt><dd>' + esc(Scouting.conductText(c)) + '</dd></div>' +
           '<div><dt>成長力</dt><dd>' + esc(Scouting.growthText(c)) + '</dd></div>' +
           '<div><dt>将来性</dt><dd>' + esc(Scouting.futureText(c)) + '</dd></div>' +
         '</dl>' +
@@ -507,6 +506,11 @@ const CS = (() => {
     const a = state.arrivals || { joined: [], lost: [] };
     const joined = a.joined.map((id) => Team.find(state.team, id)).filter(Boolean);
     const general = (a.general || []).map((id) => Team.find(state.team, id)).filter(Boolean);
+    /* 自校に来た選手は特待生か推薦枠かで分け、他の進路を選んだ選手は推薦枠を出した選手だけ */
+    const spJoined = joined.filter((p) => p.route === '特待生');
+    const recJoined = joined.filter((p) => p.route !== '特待生');
+    const lost = (a.lost || []).filter((x) => x.offered);
+    const spLost = lost.some((x) => x.special);
     /* 野手と投手は列が違うので、表を分ける */
     const split = (list) => {
       const bat = list.filter((p) => p.kind !== 'pitcher'), pit = list.filter((p) => p.kind === 'pitcher');
@@ -515,11 +519,16 @@ const CS = (() => {
     };
     show(
       '<h2 class="section-title">' + state.year + '年度　新入生入部</h2>' +
-      '<h3 class="sub">推薦で入部した新入生（' + joined.length + '人）</h3>' +
-      (joined.length ? split(joined) : '<p class="note">推薦で来てくれた選手はいませんでした。</p>') +
+      '<h3 class="sub">特待生で入部した新入生（' + spJoined.length + '人）</h3>' +
+      (spJoined.length ? split(spJoined) : '<p class="note">' + (spLost ? '特待生にした選手は、他の進路を選びました。' : '特待生は出していません。') + '</p>') +
+      '<h3 class="sub">推薦枠で入部した新入生（' + recJoined.length + '人）</h3>' +
+      (recJoined.length ? split(recJoined) : '<p class="note">推薦枠で来てくれた選手はいませんでした。</p>') +
       (a.over > 0 ? '<p class="note">1学年の上限のため、' + a.over + '人は受け入れられませんでした。</p>' : '') +
-      (a.lost.length ? '<h3 class="sub">他の進路を選んだ有望選手</h3><ul class="lostlist">' + a.lost.map((x) =>
-        '<li><b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '・' + x.tier + '）' + (x.offered ? '<i class="tag">推薦枠を提示</i>' : '') + ' → ' + esc(x.text) + '</li>').join('') + '</ul>' : '') +
+      '<h3 class="sub">推薦枠を出したが、他の進路を選んだ選手（' + lost.length + '人）</h3>' +
+      (lost.length ? '<ul class="lostlist">' + lost.map((x) =>
+        '<li>' + (x.special ? '<b class="tag tag--gold">特待生</b>' : '<span class="tag">推薦枠</span>') +
+        ' <b>' + esc(x.name) + '</b>（' + (x.kind === 'pitcher' ? '投手' : posName(x.pos)) + '）　→ ' + esc(x.text) + '</li>').join('') + '</ul>'
+        : '<p class="note">推薦枠を出した選手は全員入部しました。</p>') +
       '<h3 class="sub">一般入試で入部した新入生（' + general.length + '人）</h3>' +
       (general.length ? split(general) : '<p class="note">部員が足りているため、一般入試からの入部はありませんでした。</p>') +
       '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="ar-next">春の特訓へ</button></div>',

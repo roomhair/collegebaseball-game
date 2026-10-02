@@ -218,15 +218,16 @@ const UI = (() => {
     return '<span class="g5 g5-' + letter + '">' + letter + '</span>';
   }
 
-  /** 一覧の右側に足す列（成長力・調子・疲労・素行・性格・状態） */
+  /** 一覧の右側に足す列（成長力・調子・疲労・性格・状態）。
+     素行は内部では持っているが、A〜Eの格付けとしては見せない。
+     opts.noCond：チーム作りの画面など、まだ試合をしていないところでは調子・疲労を出さない */
   function collegeCells(p, opts) {
     const st = (opts.state && typeof College !== 'undefined') ? College.statusText(opts.state, p) : '';
     const cond = p.condition || 0;
-    const conductKnown = p.known !== false;
     return '<td class="c">' + (p.growthRate != null ? gradeSpan(Persona.grade5(p.growthRate)) : '―') + '</td>' +
-      '<td class="c cond cond' + cond + '" title="' + Persona.condLabel(cond) + '">' + Persona.condMark(cond) + '</td>' +
-      '<td class="c fat' + (p.fatigue >= 45 ? ' is-tired' : '') + '">' + Math.round(p.fatigue || 0) + '</td>' +
-      '<td class="c">' + (p.persona ? (conductKnown ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？') : '―') + '</td>' +
+      (opts.noCond ? '' :
+        '<td class="c cond cond' + cond + '" title="' + Persona.condLabel(cond) + '">' + Persona.condMark(cond) + '</td>' +
+        '<td class="c fat' + (p.fatigue >= 45 ? ' is-tired' : '') + '">' + Math.round(p.fatigue || 0) + '</td>') +
       '<td class="t-persona">' + esc(p.persona ? (p.known ? Persona.label(p.persona.type) : '不明') : '―') + '</td>' +
       '<td class="c status">' + (st ? '<b class="stbad">' + esc(st) + '</b>' : '') +
         (p.persona && Persona.isProblem(p) && p.known ? '<i class="warnmark" title="素行に注意">要注意</i>' : '') + '</td>';
@@ -238,14 +239,14 @@ const UI = (() => {
     const known = p.known;
     const rows = [
       ['性格', known ? Persona.label(p.persona.type) : '（' + esc(p.rumorText || '人柄はまだよく分からない') + '）'],
-      ['素行', known ? gradeSpan(Persona.conductRank(p.persona.conduct)) : '？'],
       ['キャプテンシー', gradeSpan(Persona.grade5(p.persona.lead))],
       ['メンタル', known ? gradeSpan(Persona.grade5(p.persona.mental)) : '？'],
       ['成長力', gradeSpan(Persona.grade5(p.growthRate))],
       ['将来性', '<span class="rank rank-' + rankOf(p.potential) + '">' + rankOf(p.potential) + '</span>'],
+    ].concat(opts && opts.noCond ? [] : [
       ['調子', Persona.condLabel(p.condition || 0) + ' ' + Persona.condMark(p.condition || 0)],
       ['疲労', Persona.fatigueLabel(p.fatigue || 0) + '（' + Math.round(p.fatigue || 0) + '）'],
-    ];
+    ]);
     const st = opts && opts.state && typeof College !== 'undefined' ? College.statusText(opts.state, p) : '';
     const prof = [
       p.height ? p.height + 'cm・' + p.weight + 'kg' : '',
@@ -330,7 +331,7 @@ const UI = (() => {
       ? '<th>球速</th><th>制球</th><th>スタ</th><th class="t-break">変化球</th>'
       : '<th>弾道</th><th>ミート</th><th>パワー</th><th>走力</th><th>肩力</th><th>守備</th><th>捕球</th>';
     const roleHead = opts.team ? '<th>いまの役割</th>' : '';
-    const colHead = opts.college ? '<th>成長</th><th>調子</th><th>疲労</th><th>素行</th><th class="t-persona">性格</th><th>状態</th>' : '';
+    const colHead = opts.college ? '<th>成長</th>' + (opts.noCond ? '' : '<th>調子</th><th>疲労</th>') + '<th class="t-persona">性格</th><th>状態</th>' : '';
     return '<div class="tablewrap"><table class="roster">' +
       '<thead><tr><th>年</th><th class="nm">選手</th>' + roleHead +
       (isPit ? '' : '<th>位置</th>') + '<th class="hand">利き</th>' + head + colHead + '</tr></thead>' +
