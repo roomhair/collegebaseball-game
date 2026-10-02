@@ -30,7 +30,13 @@ const Sim = (() => {
   function misfitBat(p, pos) {
     if (!pos || pos === 'DH' || !p || p.kind === 'pitcher' && pos === 'P') return 0;
     if (p.throws === 'L' && Player.RIGHT_ONLY.indexOf(pos) >= 0) return 26;
-    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G') / 2;
+    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G') / 2.7;
+  }
+  /** その位置の適性の減点（左投げの選手が捕手・内野を守るときは最低の扱い） */
+  function misfitPen(p, pos) {
+    if (!p || !pos || pos === 'DH' || pos === 'P') return 0;
+    if (p.throws === 'L' && Player.RIGHT_ONLY.indexOf(pos) >= 0) return 70;
+    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G');
   }
   function catcherDrag(c) {
     if (!c) return 42;
@@ -207,7 +213,8 @@ const Sim = (() => {
       const fielder = defenders ? defenders[spot] : null;
       const eff = fielder ? Team.defScore(fielder, spot) : defRating * 100;
       const base = type === 'GB' ? 0.045 : 0.018;
-      const pE = C(base + (52 - eff) / 100 * (eff < 52 ? 0.65 : 0.24), 0.004, 0.40);
+      const mpE = fielder ? misfitPen(fielder, spot) : 0;
+      const pE = C(base + (52 - eff) / 100 * (eff < 52 ? 0.65 : 0.24) + Math.max(0, mpE - 14) / 56 * 0.18, 0.004, 0.45);
       if (RNG.chance(pE)) {
         return { code: 'E', text: posShort(spot) + '失', out: 0, spot, by: fielder ? fielder.id : null };
       }
@@ -223,7 +230,10 @@ const Sim = (() => {
     const byType = { GB: 0.235, LD: 0.660, FB: 0.215, PU: 0.020 }[type];
     /* 大学版：打球が飛んだ先の野手が、その位置に慣れていないほど抜ける（守備位置のミスを重くする） */
     const atSpot = spot !== 'P' && defenders && defenders[spot] ? Team.defScore(defenders[spot], spot) : 50;
-    const misplay = 1 + 2.2 * Math.max(0, 46 - atSpot) / 46;
+    /* 抜けやすさは「その位置の適性」で決める（本職の位置なら、守備の数値が低くても増えない）。
+       適性C（減点14）までは影響なし、E・F・Gと下がるほど大きく抜ける */
+    const mp = spot !== 'P' && defenders && defenders[spot] ? misfitPen(defenders[spot], spot) : 0;
+    const misplay = 1 + 4.5 * Math.max(0, mp - 14) / 56;
     const pHit = C(byType * (babip / 0.30) * misplay, 0.01, 0.92);
 
     if (RNG.chance(pHit)) {
@@ -240,7 +250,7 @@ const Sim = (() => {
         kind = RNG.chance(0.04 + sp * 0.03) ? '2B' : '1B';
       }
       /* 慣れない外野手は打球の目測を誤り、単打が長打になる */
-      if (kind === '1B' && isOF && atSpot < 40 && RNG.chance((40 - atSpot) / 40 * 0.6)) kind = '2B';
+      if (kind === '1B' && isOF && mp > 14 && RNG.chance((mp - 14) / 56 * 0.7)) kind = RNG.chance(0.25) ? '3B' : '2B';
       /* 長打の方向は外野で言う */
       const ofKey = bat.bats === 'L' ? mirror(OF_BY_ZONE[zone]) : OF_BY_ZONE[zone];
       const mark = kind === '1B' ? '安' : (kind === '2B' ? '二' : '三');

@@ -480,17 +480,18 @@ section('オーダーをデタラメにすると勝てない／ケガ人が出�
     return { pid: sl.pid, pos };
   });
   const worst = v0.pitchers.slice().sort((a, b) => Player.rating(a) - Player.rating(b))[0];
-  let wGood = 0, wBad = 0;
+  let wGood = 0, wBad = 0, raBad = 0, raGood = 0;
   const N = 40;
   for (let i = 0; i < N; i++) {
     const a = JSON.parse(JSON.stringify(s0));
-    Engine.autoGame(a); if (a.lastResult.win) wGood++;
+    Engine.autoGame(a); if (a.lastResult.win) wGood++; raGood += a.lastResult.opRuns;
     const b = JSON.parse(JSON.stringify(s0));
     b.team.lineup = bad.map((x) => Object.assign({}, x));
     b.team.rotation = [worst.id].concat(b.team.rotation.filter((id) => id !== worst.id));
-    Engine.autoGame(b); if (b.lastResult.win) wBad++;
+    Engine.autoGame(b); if (b.lastResult.win) wBad++; raBad += b.lastResult.opRuns;
   }
-  ok(wBad / N <= 0.15 && wGood - wBad >= N * 0.2, 'デタラメなオーダーは大きく負け越す（おまかせ ' + wGood + '勝 / デタラメ ' + wBad + '勝・' + N + '試合）');
+  ok(raBad / N >= 10 && raBad > raGood * 2.5, 'デタラメな守備位置だと大量に点を取られる（1試合平均の失点 おまかせ ' + (raGood / N).toFixed(1) + ' / デタラメ ' + (raBad / N).toFixed(1) + '）');
+  ok(wBad / N <= 0.05 && wBad <= wGood, 'デタラメなオーダーは大きく負け越す（おまかせ ' + wGood + '勝 / デタラメ ' + wBad + '勝・' + N + '試合）');
   /* スタメンの1人がケガをしても、残り8人の守備位置と打順はそのまま */
   const c = JSON.parse(JSON.stringify(s0));
   c.team.lineup = bad.map((x) => Object.assign({}, x));
