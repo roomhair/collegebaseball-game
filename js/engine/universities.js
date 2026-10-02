@@ -114,7 +114,7 @@ const Universities = (() => {
     Team.all(t).forEach((p) => {
       p.career = p.kind === 'pitcher' ? Player.emptyPit() : Player.emptyBat();
       p.tour = p.kind === 'pitcher' ? Player.emptyPit() : Player.emptyBat();
-      if (opt.persona) Persona.assign(p);
+      if (opt.persona) Persona.assign(p, { noOdd: true });
     });
     Team.autoLineup(t);
     t.level = level;

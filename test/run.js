@@ -501,6 +501,50 @@ section('オーダーをデタラメにすると勝てない／ケガ人が出�
   ok(College.injured(hurt) && v.lineup.length === 9 && kept && !v.rebuilt, 'ケガ人のところだけ控えで埋める');
 }
 
+/* ---------- 変わったエピソード ---------- */
+section('変わったエピソードは別の選手と被らない（古いデータも直す）');
+{
+  const { Persona } = G;
+  ok(Persona.ODD_EPISODES.length >= 200 && new Set(Persona.ODD_EPISODES).size === Persona.ODD_EPISODES.length, '変わったエピソードは200種類以上で重複なし（' + Persona.ODD_EPISODES.length + '）');
+  const odd = new Set(Persona.ODD_EPISODES);
+  /* 選手ID → 変わったエピソード を集め、別の選手と被っていないか */
+  const collect = (st) => {
+    const owner = new Map(); let dup = 0, n = 0;
+    const take = (id, list) => (list || []).forEach((t) => {
+      if (!odd.has(t)) return;
+      n++;
+      if (owner.has(t) && owner.get(t) !== id) dup++; else owner.set(t, id);
+    });
+    const walk = (o, d) => {
+      if (!o || typeof o !== 'object' || d > 12) return;
+      if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1)); return; }
+      if (o.episodes && o.id) take(o.id, o.episodes);
+      if (o.seen && o.player) take(o.player.id, o.seen);
+      Object.keys(o).forEach((k) => { if (k !== 'episodes' && k !== 'seen') walk(o[k], d + 1); });
+    };
+    walk(st, 0);
+    return { dup, n };
+  };
+  const s = Engine.newGame();
+  const A = makeAuto(G, {});
+  let total = 0, dups = 0;
+  /* 毎シーズン、その時点で残っているデータの中を調べる */
+  let lastSeq = -1;
+  runUntil(s, A, (x) => {
+    if (x.seasonSeq !== lastSeq) { lastSeq = x.seasonSeq; const r = collect(x); total = Math.max(total, r.n); dups += r.dup; }
+    return x.year >= CONFIG.START_YEAR + 10 || x.mode !== 'college';
+  }, 200000);
+  ok(dups === 0 && total > 10, '10年遊んでも変わったエピソードが被らない（同時に出ていた数 ' + total + '・使った種類 ' + (s.oddUsed || []).length + '）');
+  /* 古いデータ：わざと2人に同じ話を付けて読み込む */
+  const old = JSON.parse(JSON.stringify(s));
+  delete old.oddUsed;
+  const [a, b] = Team.all(old.team);
+  a.episodes = [Persona.ODD_EPISODES[9]]; b.episodes = [Persona.ODD_EPISODES[9], 'ふつうの話'];
+  Persona.adopt(old);
+  ok(a.episodes[0] === Persona.ODD_EPISODES[9] && b.episodes[0] !== Persona.ODD_EPISODES[9] && odd.has(b.episodes[0]) && b.episodes[1] === 'ふつうの話' && collect(old).dup === 0, '古いデータの被りは読み込むときに別の話へ差し替える');
+  Persona.bind(null);
+}
+
 /* ---------- 長期プレイ ---------- */
 section('長期プレイ：20年まわしても壊れない');
 {

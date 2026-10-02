@@ -49,6 +49,7 @@ const App = (() => {
         if (!s) { toast('データ' + n + 'を読み込めませんでした'); return; }
         RNG.unseed();
         state = s; slot = n;
+        Persona.adopt(state);
         render();
       },
       fresh(n, used) {
@@ -463,6 +464,7 @@ const App = (() => {
         cont: after(() => Pro.continuePro(state)),
         back: () => UI.confirmBox({ title: '大学野球へ戻る', body: 'プロ野球に参戦する直前の大学野球の状態に戻ります。プロでの選手の成長などは持ち込みません。', yes: '大学野球へ戻る' }, () => {
           state = Pro.returnToCollege(state);
+          Persona.bind(state);
           save(); render();
           toast('大学野球に戻りました');
         }),

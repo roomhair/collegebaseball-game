@@ -154,7 +154,7 @@ const Rivals = (() => {
       : Player.newBatter({ grade: 1, level: param, pos, practice: false });
     p.career = kind === 'pitcher' ? Player.emptyPit() : Player.emptyBat();
     p.tour = kind === 'pitcher' ? Player.emptyPit() : Player.emptyBat();
-    Persona.assign(p);
+    Persona.assign(p, { noOdd: true });
     p.hs = NAMES.highSchool(RNG.chance(0.15));
     mark(p, year);
     return p;
