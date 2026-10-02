@@ -5,6 +5,12 @@ const { makeAuto } = require('./auto');
 const G = load();
 const { Engine, Team, Player, League, Universities, College, Incidents, Records, Soccer, Pro, Storage, CONFIG, Rivals } = G;
 
+/* 仕組みのテスト（昇格・卒業・セーブなど）は、途中でサッカー部へ移ると確かめられないので、
+   以前のやさしい強さ（1部57・2部49・3部41）で回す。いまの強さでの順位の偏りは test/sym.js で測る */
+const REAL_LEVEL = { base: Object.assign({}, CONFIG.LEVEL.DIV_BASE), spread: CONFIG.LEVEL.DIV_SPREAD };
+CONFIG.LEVEL.DIV_BASE = { 1: 57, 2: 49, 3: 41 };
+CONFIG.LEVEL.DIV_SPREAD = 4.5;
+
 let fails = 0, passes = 0;
 function ok(cond, msg) { if (cond) { passes++; } else { fails++; console.log('  ✗ ' + msg); } }
 function section(t) { console.log('\n■ ' + t); }
@@ -537,7 +543,10 @@ section('変わったエピソードは別の選手と被らない（古いデ�
   }, 200000);
   ok(dups === 0 && total > 10, '10年遊んでも変わったエピソードが被らない（同時に出ていた数 ' + total + '・使った種類 ' + (s.oddUsed || []).length + '）');
   /* 古いデータ：わざと2人に同じ話を付けて読み込む */
-  const old = JSON.parse(JSON.stringify(s));
+  /* （10年のうちにサッカー部へ移っていることもあるので、野球部のチームがあるデータを使う） */
+  let base = s;
+  if (!base.team) { base = Engine.newGame(); runUntil(base, makeAuto(G, {}), (x) => x.phase === 'SPRING_TRAINING', 20000); }
+  const old = JSON.parse(JSON.stringify(base));
   delete old.oddUsed;
   const [a, b] = Team.all(old.team);
   a.episodes = [Persona.ODD_EPISODES[9]]; b.episodes = [Persona.ODD_EPISODES[9], 'ふつうの話'];
@@ -547,8 +556,10 @@ section('変わったエピソードは別の選手と被らない（古いデ�
 }
 
 /* ---------- 強さの目安の手直し ---------- */
-section('古いデータは、3部の大学の強さを新しい目安へ一度だけ合わせる');
+section('古いデータは、各大学の強さを新しい目安へ一度だけ合わせる');
 {
+  CONFIG.LEVEL.DIV_BASE = Object.assign({}, REAL_LEVEL.base);
+  CONFIG.LEVEL.DIV_SPREAD = REAL_LEVEL.spread;
   const s = Engine.newGame();
   ok(s.balanceV === Universities.BALANCE_V && !Universities.rebalance(s), '新しいデータは手直し不要');
   moveUserTo(s, 1);
@@ -559,7 +570,9 @@ section('古いデータは、3部の大学の強さを新しい目安へ一度�
   const before = d3.map((id) => old.unis[id].level);
   ok(Universities.rebalance(old) && old.balanceV === Universities.BALANCE_V, '古いデータを手直しする');
   const after = d3.map((id) => old.unis[id].level);
-  ok(after.every((v, i) => Math.abs(v - before[i] - 5) < 0.05), '3部の大学は強さ +5（' + before.map((v, i) => v + '→' + after[i]).join(' ') + '）');
+  /* 最初の版（3部の目安41・伝統の差4.5）から、いまの目安へ動く */
+  const want = d3.map((id, i) => before[i] + Universities.targetLevel(old.unis[id], 3) - (41 + old.unis[id].tradition * 4.5));
+  ok(after.every((v, i) => Math.abs(v - want[i]) < 0.11), '3部の大学は新しい目安のぶん強くなる（' + before.map((v, i) => v + '→' + after[i]).join(' ') + '）');
   ok(!Universities.rebalance(old), '二度は手直ししない');
   /* 部員を保存している大学（自校と同じ部）は、部員の能力が上がる */
   const s2 = Engine.newGame();
@@ -571,6 +584,9 @@ section('古いデータは、3部の大学の強さを新しい目安へ一度�
   ok(o2.unis[rid].level > lv0 + 3, '部員を保存している3部の大学も強くなる（' + lv0 + '→' + o2.unis[rid].level + '）');
   Rivals.check(o2);
 }
+
+CONFIG.LEVEL.DIV_BASE = { 1: 57, 2: 49, 3: 41 };
+CONFIG.LEVEL.DIV_SPREAD = 4.5;
 
 /* ---------- 長期プレイ ---------- */
 section('長期プレイ：20年まわしても壊れない');

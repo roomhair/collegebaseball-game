@@ -154,18 +154,25 @@ const Universities = (() => {
   }
 
   /* ---------- 強さの目安を変えたときの、古いデータの手直し ----------
-     BALANCE_V 2：3部の目安を 41→46、1部を 57→56 にした（3部の相手を強くし、2部との差を小さく）。
-     読み込んだデータが古ければ、各大学の強さをその差のぶんだけ一度だけ動かす。
-     部員を保存している大学は、部員の能力を上げ下げする */
-  const BALANCE_V = 2;
-  const SHIFT_V2 = { 1: -1, 2: 0, 3: 5 };
+     版ごとの「部ごとの強さの目安」と「伝統による差」。読み込んだデータが古ければ、
+     各大学の強さを「新しい目安 − 古い目安」のぶんだけ一度だけ動かす。
+     部員を保存している大学は、部員の能力を上げ下げする。
+     1：最初の版／2：3部を強く（41→46）／
+     3：1部優勝と3部最下位が同じくらい起きるよう、全体を強く・差を小さく（config.js の LEVEL） */
+  const BALANCE_V = 3;
+  const OLD_LEVELS = {
+    1: { base: { 1: 57, 2: 49, 3: 41 }, spread: 4.5 },
+    2: { base: { 1: 56, 2: 49, 3: 46 }, spread: 4.5 },
+  };
   function rebalance(state) {
     if (!state || !state.unis || (state.balanceV || 1) >= BALANCE_V) return false;
+    const old = OLD_LEVELS[state.balanceV || 1];
     Object.keys(state.unis).forEach((id) => {
       if (id === state.userUni) return;
       const d = divOf(state, id);
-      const delta = SHIFT_V2[d] || 0;
-      if (!delta) return;
+      const u = state.unis[id];
+      const delta = targetLevel(u, d) - (old.base[d] + (u.tradition || 0) * old.spread);
+      if (Math.abs(delta) < 0.05) return;
       const t = state.rosters && state.rosters[id];
       if (t) {
         const add = delta / 0.8625;     // 強さ1 ≒ 能力 1/0.8625
