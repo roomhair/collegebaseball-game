@@ -78,8 +78,8 @@ const CONFIG = {
 
   /* 大学の強さ（Team.strength とおおむね同じ目盛り） */
   LEVEL: {
-    DIV_BASE: { 1: 56, 2: 49, 3: 46 },
-    DIV_SPREAD: 4.5,
+    DIV_BASE: { 1: 58.5, 2: 56.5, 3: 54.5 },
+    DIV_SPREAD: 2,
     NATIONAL_FROM: 60,     // 全国大会の1回戦の相手
     NATIONAL_STEP: 2.2,    // 1つ勝ち上がるごとに
     PRO_BASE: 72,
