@@ -23,6 +23,20 @@ const Sim = (() => {
      変化球だけで押し切れると高校野球らしくないので、球速のほうを重く見る */
   function stuffOf(p) { return C(veloScore(p) * 0.68 + Player.breakScore(p) * 0.32, 0, 1); }
 
+  /* 大学版：慣れない守備位置に就いた選手は、守りだけでなく打席でも
+     集中しきれない（適性G＝まったく守ったことのない位置で、ミート・パワー −17 くらい）。
+     捕手は配球・捕球の要なので、捕手に向かない選手が座ると投手の球威・制球がまるごと落ちる。
+     「オーダーをデタラメにしても勝ててしまう」をなくすため */
+  function misfitBat(p, pos) {
+    if (!pos || pos === 'DH' || !p || p.kind === 'pitcher' && pos === 'P') return 0;
+    if (p.throws === 'L' && Player.RIGHT_ONLY.indexOf(pos) >= 0) return 17;
+    return Player.aptPenalty(p.apt ? p.apt[pos] : 'G') / 3;
+  }
+  function catcherDrag(c) {
+    if (!c) return 30;
+    return C((58 - Team.defScore(c, 'C')) / 58, 0, 1) * 30;
+  }
+
   /** 守備陣のまとまり（0〜1）。安打になりにくさに効く */
   function defenseOf(team, pitcherId) {
     const d = Team.defenders(team, pitcherId);
@@ -193,7 +207,7 @@ const Sim = (() => {
       const fielder = defenders ? defenders[spot] : null;
       const eff = fielder ? Team.defScore(fielder, spot) : defRating * 100;
       const base = type === 'GB' ? 0.045 : 0.018;
-      const pE = C(base + (52 - eff) / 100 * 0.24, 0.004, 0.26);
+      const pE = C(base + (52 - eff) / 100 * (eff < 52 ? 0.40 : 0.24), 0.004, 0.30);
       if (RNG.chance(pE)) {
         return { code: 'E', text: posShort(spot) + '失', out: 0, spot, by: fielder ? fielder.id : null };
       }
@@ -202,7 +216,8 @@ const Sim = (() => {
     /* 安打になるか。打球の種類でまったく違う */
     const babip = C(
       0.300 + 0.30 * (contact - stuff) + 0.07 * (pw - 0.5) +
-      0.05 * (bat.speed / 100 - 0.5) - 0.28 * (defRating - 0.45),
+      0.05 * (bat.speed / 100 - 0.5) - 0.28 * (defRating - 0.45) +
+      0.35 * Math.max(0, 0.38 - defRating),   // 大学版：守備が崩れていると、さらに抜ける
       0.09, 0.58
     );
     const byType = { GB: 0.235, LD: 0.660, FB: 0.215, PU: 0.020 }[type];
@@ -670,7 +685,8 @@ const Sim = (() => {
       const res = tactic
         ? resolveTactic(tactic, bat, pit, defRating)
         : resolvePA(bat, pit, defTeam, defRating, fatigue, defenders,
-                    off.form + (bat.gameForm || 0), def.form + (pit.gameForm || 0) * 0.5);
+                    off.form + (bat.gameForm || 0) - misfitBat(bat, slot.pos),
+                    def.form + (pit.gameForm || 0) * 0.5 - catcherDrag(defenders.C));
       res.slotIndex = slotIndex;
 
       def.bf++;

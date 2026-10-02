@@ -463,6 +463,44 @@ section('セーブ：データ1〜3の新規保存・上書き保存・ロード
   ok(size < 900000, '1データの大きさ ' + Math.round(size / 1024) + 'KB');
 }
 
+/* ---------- デタラメなオーダー ---------- */
+section('オーダーをデタラメにすると勝てない／ケガ人が出ても組んだオーダーは崩さない');
+{
+  const s0 = Engine.newGame();
+  const A = makeAuto(G, {});
+  runUntil(s0, A, (x) => x.step === 'pregame' && x.match && x.match.kind === 'league', 20000);
+  const v0 = College.matchTeam(s0);
+  /* 9人をそれぞれいちばん守れない位置へ。先発はいちばん力の劣る投手 */
+  const left = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+  const bad = v0.lineup.map((sl) => {
+    const p = Team.find(v0, sl.pid);
+    left.sort((a, b) => Team.defScore(p, a) - Team.defScore(p, b));
+    const pos = left.find((k) => k !== 'DH') || left[0];
+    left.splice(left.indexOf(pos), 1);
+    return { pid: sl.pid, pos };
+  });
+  const worst = v0.pitchers.slice().sort((a, b) => Player.rating(a) - Player.rating(b))[0];
+  let wGood = 0, wBad = 0;
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    const a = JSON.parse(JSON.stringify(s0));
+    Engine.autoGame(a); if (a.lastResult.win) wGood++;
+    const b = JSON.parse(JSON.stringify(s0));
+    b.team.lineup = bad.map((x) => Object.assign({}, x));
+    b.team.rotation = [worst.id].concat(b.team.rotation.filter((id) => id !== worst.id));
+    Engine.autoGame(b); if (b.lastResult.win) wBad++;
+  }
+  ok(wBad / N <= 0.15 && wGood - wBad >= N * 0.2, 'デタラメなオーダーは大きく負け越す（おまかせ ' + wGood + '勝 / デタラメ ' + wBad + '勝・' + N + '試合）');
+  /* スタメンの1人がケガをしても、残り8人の守備位置と打順はそのまま */
+  const c = JSON.parse(JSON.stringify(s0));
+  c.team.lineup = bad.map((x) => Object.assign({}, x));
+  const hurt = Team.find(c.team, bad[3].pid);
+  hurt.injury = { games: 3, label: 'テスト' };
+  const v = College.matchTeam(c);
+  const kept = bad.filter((x) => x.pid !== hurt.id).every((x) => v.lineup.some((sl) => sl.pid === x.pid && sl.pos === x.pos));
+  ok(College.injured(hurt) && v.lineup.length === 9 && kept && !v.rebuilt, 'ケガ人のところだけ控えで埋める');
+}
+
 /* ---------- 長期プレイ ---------- */
 section('長期プレイ：20年まわしても壊れない');
 {
