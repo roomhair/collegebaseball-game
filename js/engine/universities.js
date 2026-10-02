@@ -153,5 +153,35 @@ const Universities = (() => {
     return { a: ra, b: rb, inn };
   }
 
-  return { init, divOf, name, evolve, makeRoster, quickGame, targetLevel, USER_ID, LEVEL_BIAS, paramOf };
+  /* ---------- 強さの目安を変えたときの、古いデータの手直し ----------
+     BALANCE_V 2：3部の目安を 41→46、1部を 57→56 にした（3部の相手を強くし、2部との差を小さく）。
+     読み込んだデータが古ければ、各大学の強さをその差のぶんだけ一度だけ動かす。
+     部員を保存している大学は、部員の能力を上げ下げする */
+  const BALANCE_V = 2;
+  const SHIFT_V2 = { 1: -1, 2: 0, 3: 5 };
+  function rebalance(state) {
+    if (!state || !state.unis || (state.balanceV || 1) >= BALANCE_V) return false;
+    Object.keys(state.unis).forEach((id) => {
+      if (id === state.userUni) return;
+      const d = divOf(state, id);
+      const delta = SHIFT_V2[d] || 0;
+      if (!delta) return;
+      const t = state.rosters && state.rosters[id];
+      if (t) {
+        const add = delta / 0.8625;     // 強さ1 ≒ 能力 1/0.8625
+        Team.all(t).forEach((p) => {
+          const keys = p.kind === 'pitcher' ? ['control', 'stamina'] : ['meet', 'power', 'speed', 'arm', 'field', 'catch'];
+          keys.forEach((k) => { p[k] = RNG.stat(Math.round(p[k] + add)); });
+          if (p.kind === 'pitcher') p.velo = Math.max(110, Math.min(160, Math.round(p.velo + add / 2)));
+        });
+        Rivals.refresh(state, id);
+      } else {
+        state.unis[id].level = Math.round((state.unis[id].level + delta) * 10) / 10;
+      }
+    });
+    state.balanceV = BALANCE_V;
+    return true;
+  }
+
+  return { init, divOf, name, evolve, makeRoster, quickGame, targetLevel, USER_ID, LEVEL_BIAS, paramOf, rebalance, BALANCE_V };
 })();

@@ -50,6 +50,7 @@ const App = (() => {
         RNG.unseed();
         state = s; slot = n;
         Persona.adopt(state);
+        Universities.rebalance(state);
         render();
       },
       fresh(n, used) {

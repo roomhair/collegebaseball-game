@@ -545,6 +545,32 @@ section('変わったエピソードは別の選手と被らない（古いデ�
   Persona.bind(null);
 }
 
+/* ---------- 強さの目安の手直し ---------- */
+section('古いデータは、3部の大学の強さを新しい目安へ一度だけ合わせる');
+{
+  const s = Engine.newGame();
+  ok(s.balanceV === Universities.BALANCE_V && !Universities.rebalance(s), '新しいデータは手直し不要');
+  moveUserTo(s, 1);
+  Rivals.sync(s);
+  const old = JSON.parse(JSON.stringify(s));
+  delete old.balanceV;
+  const d3 = old.divisions[3];
+  const before = d3.map((id) => old.unis[id].level);
+  ok(Universities.rebalance(old) && old.balanceV === Universities.BALANCE_V, '古いデータを手直しする');
+  const after = d3.map((id) => old.unis[id].level);
+  ok(after.every((v, i) => Math.abs(v - before[i] - 5) < 0.05), '3部の大学は強さ +5（' + before.map((v, i) => v + '→' + after[i]).join(' ') + '）');
+  ok(!Universities.rebalance(old), '二度は手直ししない');
+  /* 部員を保存している大学（自校と同じ部）は、部員の能力が上がる */
+  const s2 = Engine.newGame();
+  moveUserTo(s2, 3); Rivals.sync(s2);
+  const o2 = JSON.parse(JSON.stringify(s2)); delete o2.balanceV;
+  const rid = o2.divisions[3].find((id) => id !== o2.userUni);
+  const lv0 = o2.unis[rid].level;
+  Universities.rebalance(o2);
+  ok(o2.unis[rid].level > lv0 + 3, '部員を保存している3部の大学も強くなる（' + lv0 + '→' + o2.unis[rid].level + '）');
+  Rivals.check(o2);
+}
+
 /* ---------- 長期プレイ ---------- */
 section('長期プレイ：20年まわしても壊れない');
 {
