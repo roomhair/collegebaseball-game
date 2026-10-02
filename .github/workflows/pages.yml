@@ -2,9 +2,11 @@
 # リポジトリの Settings → Pages → Source を「GitHub Actions」にしておくこと。
 name: Deploy to GitHub Pages
 
+# 公開は main だけから行う（作業ブランチへのプッシュで動かすと、同じ「pages」の枠で
+# main の公開が取り消されてしまうため）
 on:
   push:
-    branches: [main, claude/college-baseball-game]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
