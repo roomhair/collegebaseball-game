@@ -75,6 +75,7 @@ const Engine = (() => {
       achievements: { proEntries: 0, proSeasons: 0, soccer: 0, revived: 0 },
     };
     Persona.bind(state);   // 変わったエピソードを、このデータの中で被らせない
+    state.balanceV = Universities.BALANCE_V;   // 強さの目安は最新のもの
     Universities.init(state, opt.uniName || null);
     Rivals.sync(state);
     Records.init(state);
