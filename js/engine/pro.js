@@ -349,6 +349,8 @@ const Pro = (() => {
     back.proTeamNames = (state.proTeamNames || back.proTeamNames).slice();
     back.slotMeta = state.slotMeta;
     back.mode = 'college';
+    /* プロにいるあいだに使った変わったエピソードも使用済みのまま */
+    back.oddUsed = Array.from(new Set((back.oddUsed || []).concat(state.oddUsed || [])));
     return back;
   }
 
