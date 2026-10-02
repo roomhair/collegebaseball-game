@@ -407,13 +407,14 @@ const CS = (() => {
       }).join('') + '</ul>' : '<p class="note">まだ誰にも推薦枠を出していません。</p>') +
     '</section>';
 
+    const spc = sc.special ? sc.cands.find((c) => c.id === sc.special) : null;
     show(
       '<h2 class="section-title">新入生スカウト</h2>' +
       '<div class="scoutbar">' +
-        '<span>視察できる回数 <b>' + sc.points + '</b> / ' + Scouting.POINTS + '</span>' +
-        '<span>推薦枠 <b>' + sc.offers + '</b> / ' + CONFIG.ROSTER.REC_SLOTS + '</span>' +
-        '<span>特待生 <b>' + (sc.special ? 1 : 0) + '</b> / 1</span>' +
-        '<span>大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
+        '<span>視察 残り <b>' + sc.points + '</b>回<small> / ' + Scouting.POINTS + '</small></span>' +
+        '<span>推薦枠 <b>' + sc.offers + '</b>人<small> / ' + CONFIG.ROSTER.REC_SLOTS + '</small></span>' +
+        '<span>特待生 ' + (spc ? '<b class="scoutbar__sp">選択済み</b>（' + esc(spc.player.name) + '）' : '<b>まだ</b>') + '</span>' +
+        '<span class="scoutbar__extra">大学の評価 <b>' + Records.prestigeRank(pres) + '</b>（' + pres + '）</span>' +
       '</div>' +
       pickedHtml +
       '<h3 class="sub">候補の選手（' + sc.cands.length + '人）</h3>' +
@@ -447,7 +448,10 @@ const CS = (() => {
           '<em class="retire__draft">' + esc(pathText) + '</em></header>' +
         '<p class="retire__abil">' + (isPit
           ? '最速 ' + p.velo + 'km/h　制球 ' + rankOf(p.control) + ' ' + p.control + '　スタミナ ' + rankOf(p.stamina) + ' ' + p.stamina
-          : 'ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
+          : '弾道 ' + p.traj + '　ミート ' + rankOf(p.meet) + ' ' + p.meet + '　パワー ' + rankOf(p.power) + ' ' + p.power + '　走力 ' + rankOf(p.speed) + ' ' + p.speed + '　守備 ' + rankOf(p.field) + ' ' + p.field) + '</p>' +
+        (isPit ? '<p class="retire__abil retire__pitches">変化球　' + (p.pitches && p.pitches.length
+          ? p.pitches.map((q) => esc(q.name) + ' <b>' + q.level + '</b>').join('　')
+          : 'なし') + '</p>' : '') +
         (isPit ? UI.careerPitLine(p.career) : UI.careerBatLine(p.career)) +
         seasonsTable +
         ((p.titles || p.japan) ? '<p class="retire__titles">リーグ優勝 ' + (p.titles || 0) + '回' + (p.japan ? '　日本一 ' + p.japan + '回' : '') + '</p>' : '') +
