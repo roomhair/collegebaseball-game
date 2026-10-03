@@ -75,9 +75,33 @@ const App = (() => {
 
   const GAME_STEPS = ['pregame', 'game', 'verdict', 'growth', 'result'];
 
+  /* 実績を達成したら、画面の下に1つずつ知らせる */
+  function trophyNotice() {
+    if (!state) return;
+    Trophies.check(state);
+    const got = Trophies.takeQueue(state);
+    if (!got.length) return;
+    save();
+    const box = document.getElementById('trophybar') || (() => {
+      const b = document.createElement('div'); b.id = 'trophybar'; b.className = 'trophybar'; b.setAttribute('role', 'status');
+      document.body.appendChild(b); return b;
+    })();
+    got.forEach((t, i) => {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'trophybar__i';
+        el.innerHTML = '<span class="trophybar__icon" aria-hidden="true">🏆</span><span><small>実績を達成</small><b>' + UI.esc(t.name) + '</b></span>';
+        box.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('is-on'));
+        setTimeout(() => { el.classList.remove('is-on'); setTimeout(() => el.remove(), 400); }, 3200);
+      }, i * 700);
+    });
+  }
+
   function render() {
     if (!state) { showSlots(); return; }
     setChrome(true);
+    trophyNotice();
     CS.setNav('main');
     if (state.mode === 'college' && state.team) {
       try { Engine.check(state); } catch (e) { console.error(e); }
@@ -233,6 +257,7 @@ const App = (() => {
       const mineA = c.a === state.userUni;
       extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
+    if (state.opponent && state.mode === 'college') extra += CS.matchup(state, view);
     Screens.pregame(state, { view, extra });
     /* まとめて進めるボタンは、リーグ戦と入れ替え戦だけ */
     UI.el('btn-auto-card').hidden = !(m.kind === 'league' || m.kind === 'playoff');
@@ -344,6 +369,7 @@ const App = (() => {
       const div = Universities.divOf(state, state.userUni);
       const se = state.season;
       if (r.card && r.card.done) {
+        extra += CS.news(state);
         extra += '<h4 class="sub">この節の結果</h4><ul class="cardlist">' + (se.schedule[div][se.round] || []).map((k) => CS.cardLineHtml(state, se.cards[k])).join('') + '</ul>';
       }
       extra += '<h4 class="sub">' + div + '部　順位表</h4>' + CS.standingsTable(state, se, div);
@@ -353,6 +379,7 @@ const App = (() => {
     const label = nextLabel();
     UI.el('btn-result-next').textContent = label;
     UI.el('btn-result-next-top').textContent = label;
+    trophyNotice();   // 試合で達成した実績は、その試合の結果画面で知らせる
   }
 
   /** 結果画面のボタンに「次に何が起きるか」を書く */

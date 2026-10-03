@@ -255,3 +255,46 @@ body { background: var(--bg); color: var(--ink); }
 .uni-group { grid-column: 1 / -1; margin-top: 10px; }
 .good { color: var(--accent); }
 .bad { color: var(--ng); }
+
+/* ---------- 試合前の対戦カード ---------- */
+.matchup { border: 1.5px solid var(--navy); padding: 10px 12px; margin: 4px 0 12px; background: var(--panel); }
+.mu__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+.mu__head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mu__look { font-weight: 700; font-size: 15px; white-space: nowrap; }
+.mu__look.good, .mu__row.is-good .mu__v:first-child { color: var(--accent); }
+.mu__look.bad, .mu__row.is-bad .mu__v:nth-of-type(3) { color: #b03a2e; }
+.mu__row { display: grid; grid-template-columns: 2.4em 1fr 2.4em 2.6em; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-size: 13px; margin: 3px 0; }
+.mu__v { text-align: center; font-weight: 700; }
+.mu__lb { color: var(--ink-mute); font-size: 12px; }
+.mu__bar { display: flex; height: 10px; background: var(--line); overflow: hidden; }
+.mu__me { background: var(--accent); }
+.mu__op { background: var(--ink-faint, #999); opacity: .55; }
+.mu__warn { margin: 8px 0 0; padding: 6px 8px; border-left: 3px solid #b03a2e; color: #b03a2e; font-size: 13px; background: rgba(176, 58, 46, .06); }
+.mu__notes { margin: 8px 0 0; padding-left: 1.2em; font-size: 13px; }
+.mu__notes li { margin: 2px 0; }
+
+/* ---------- 実績 ---------- */
+.trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 14px; }
+.trophy { border: 1px dashed var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; opacity: .6; min-width: 0; }
+.trophy.is-got { opacity: 1; border: 1.5px solid var(--gold); background: var(--panel); }
+.trophy__icon { font-size: 18px; line-height: 1; }
+.trophy__name { font-size: 14px; }
+.trophy.is-got .trophy__name { color: var(--gold); }
+.trophy__desc { font-size: 12px; color: var(--ink-mute); }
+.trophy__when { font-size: 11px; color: var(--ink-faint); }
+.trophybar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 70px); z-index: 210; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100% - 32px); }
+.trophybar__i { display: flex; gap: 10px; align-items: center; background: var(--ink); color: var(--bg); border: 2px solid var(--gold); padding: 8px 14px; opacity: 0; transform: translateY(12px); transition: opacity .3s, transform .3s; }
+.trophybar__i.is-on { opacity: 1; transform: none; }
+.trophybar__i small { display: block; font-size: 11px; opacity: .8; }
+.trophybar__i b { font-size: 15px; }
+.trophybar__icon { font-size: 22px; }
+@media (prefers-reduced-motion: reduce) { .trophybar__i { transition: none; } }
+
+/* ---------- 大学野球ニュース ---------- */
+.news { border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); padding: 8px 2px 6px; margin: 12px 0; }
+.news__title { margin: 0 0 6px; font-size: 18px; letter-spacing: .12em; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.news__title small { font-size: 12px; letter-spacing: 0; color: var(--ink-mute); font-weight: 400; }
+.news__list { list-style: none; margin: 0; padding: 0; }
+.news__list li { padding: 4px 0; border-bottom: 1px dotted var(--line); font-size: 14px; }
+.news__list li:last-child { border-bottom: 0; }
+.news__list li.is-top { font-size: 16px; font-weight: 700; }

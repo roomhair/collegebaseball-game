@@ -381,9 +381,11 @@ const Engine = (() => {
       win, draw, myRuns: my.runs, opRuns: op.runs, round: m.label, oppName: m.oppName,
       tourName: m.label, cold: res.cold, walkoff: ctx.walkoff, innings: res.innings,
       winPitcher: findPit('w'), losePitcher: findPit('l'), savePitcher: findPit('sv'), homers,
-      injuries: post.injuries, kind: m.kind,
+      injuries: post.injuries, kind: m.kind, myHits: my.hits, opHits: op.hits,
     };
     state.lastReport = post.report;
+    /* 実績：試合の中で起きたこと（ノーヒットノーラン・サイクル安打など） */
+    if (state.mode === 'college') Trophies.game(state, state.lastResult, view);
 
     if (m.kind === 'league' || m.kind === 'playoff') {
       Records.game(state, m.oppId, my.runs, op.runs);

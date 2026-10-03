@@ -349,6 +349,9 @@ const Pro = (() => {
     back.proTeamNames = (state.proTeamNames || back.proTeamNames).slice();
     back.slotMeta = state.slotMeta;
     back.mode = 'college';
+    /* 実績は、プロにいるあいだに達成したものも残す */
+    back.trophies = Object.assign({}, back.trophies || {}, state.trophies || {});
+    back.trophyQueue = (state.trophyQueue || []).slice();
     /* プロにいるあいだに使った変わったエピソードも使用済みのまま */
     back.oddUsed = Array.from(new Set((back.oddUsed || []).concat(state.oddUsed || [])));
     return back;
