@@ -1391,6 +1391,49 @@ body { background: var(--bg); color: var(--ink); }
 .good { color: var(--accent); }
 .bad { color: var(--ng); }
 
+/* ---------- 試合前の対戦カード ---------- */
+.matchup { border: 1.5px solid var(--navy); padding: 10px 12px; margin: 4px 0 12px; background: var(--panel); }
+.mu__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 14px; }
+.mu__head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mu__look { font-weight: 700; font-size: 15px; white-space: nowrap; }
+.mu__look.good, .mu__row.is-good .mu__v:first-child { color: var(--accent); }
+.mu__look.bad, .mu__row.is-bad .mu__v:nth-of-type(3) { color: #b03a2e; }
+.mu__row { display: grid; grid-template-columns: 2.4em 1fr 2.4em 2.6em; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-size: 13px; margin: 3px 0; }
+.mu__v { text-align: center; font-weight: 700; }
+.mu__lb { color: var(--ink-mute); font-size: 12px; }
+.mu__bar { display: flex; height: 10px; background: var(--line); overflow: hidden; }
+.mu__me { background: var(--accent); }
+.mu__op { background: var(--ink-faint, #999); opacity: .55; }
+.mu__warn { margin: 8px 0 0; padding: 6px 8px; border-left: 3px solid #b03a2e; color: #b03a2e; font-size: 13px; background: rgba(176, 58, 46, .06); }
+.mu__notes { margin: 8px 0 0; padding-left: 1.2em; font-size: 13px; }
+.mu__notes li { margin: 2px 0; }
+
+/* ---------- 実績 ---------- */
+.trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 14px; }
+.trophy { border: 1px dashed var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; opacity: .6; min-width: 0; }
+.trophy.is-got { opacity: 1; border: 1.5px solid var(--gold); background: var(--panel); }
+.trophy__icon { font-size: 18px; line-height: 1; }
+.trophy__name { font-size: 14px; }
+.trophy.is-got .trophy__name { color: var(--gold); }
+.trophy__desc { font-size: 12px; color: var(--ink-mute); }
+.trophy__when { font-size: 11px; color: var(--ink-faint); }
+.trophybar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 70px); z-index: 210; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100% - 32px); }
+.trophybar__i { display: flex; gap: 10px; align-items: center; background: var(--ink); color: var(--bg); border: 2px solid var(--gold); padding: 8px 14px; opacity: 0; transform: translateY(12px); transition: opacity .3s, transform .3s; }
+.trophybar__i.is-on { opacity: 1; transform: none; }
+.trophybar__i small { display: block; font-size: 11px; opacity: .8; }
+.trophybar__i b { font-size: 15px; }
+.trophybar__icon { font-size: 22px; }
+@media (prefers-reduced-motion: reduce) { .trophybar__i { transition: none; } }
+
+/* ---------- 大学野球ニュース ---------- */
+.news { border-top: 3px double var(--ink); border-bottom: 3px double var(--ink); padding: 8px 2px 6px; margin: 12px 0; }
+.news__title { margin: 0 0 6px; font-size: 18px; letter-spacing: .12em; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.news__title small { font-size: 12px; letter-spacing: 0; color: var(--ink-mute); font-weight: 400; }
+.news__list { list-style: none; margin: 0; padding: 0; }
+.news__list li { padding: 4px 0; border-bottom: 1px dotted var(--line); font-size: 14px; }
+.news__list li:last-child { border-bottom: 0; }
+.news__list li.is-top { font-size: 16px; font-weight: 700; }
+
 </style>
 </head>
 <body>
@@ -6046,6 +6089,116 @@ const Records = (() => {
 </script>
 <script>
 /* ==================================================
+   大学野球  trophies.js
+
+   実績（トロフィー）。監督として積み上げた節目を集めていく。
+   ・試合の中で起きること（ノーヒットノーラン、サイクル安打など）は、
+     試合が終わったときに game() で調べる。
+   ・チームの歩み（昇格・優勝・プロ輩出など）は、画面を出すたびに check() で調べる。
+   ・サッカー部やプロ参戦のようなネタバレになるものは hidden にしておき、
+     達成するまで名前も条件も「？？？」で出す。
+   ・達成したものは state.trophies に { y, t } で残し、
+     画面でお知らせするぶんを state.trophyQueue に積む。
+   ================================================== */
+'use strict';
+
+const Trophies = (() => {
+
+  /* game：その試合の結果から判定する（r は lastResult、mine は自校の選手） */
+  const LIST = [
+    { id: 'win1',     name: '初勝利',               desc: '公式戦で初めて勝つ',                         game: (r) => r.win, check: (s) => s.records.team.w >= 1 },
+    { id: 'shutout',  name: '完封勝利',             desc: '相手を0点に抑えて勝つ',                      game: (r) => r.win && r.opRuns === 0 },
+    { id: 'nohit',    name: 'ノーヒットノーラン',   desc: '相手を無安打無得点に抑えて勝つ',             game: (r) => r.win && r.opRuns === 0 && r.opHits === 0 },
+    { id: 'big10',    name: '打線爆発',             desc: '1試合で10点以上取る',                        game: (r) => r.myRuns >= 10 },
+    { id: 'walkoff',  name: 'サヨナラ勝ち',         desc: 'サヨナラで勝つ',                             game: (r) => r.win && r.walkoff },
+    { id: 'cycle',    name: 'サイクル安打',         desc: '自校の打者が1試合で単打・二塁打・三塁打・本塁打',
+      game: (r, mine) => mine.some((p) => p.kind !== 'pitcher' && p.game && p.game.d2 && p.game.d3 && p.game.hr && p.game.h - p.game.d2 - p.game.d3 - p.game.hr > 0) },
+    { id: 'k15',      name: '奪三振ショー',         desc: '自校の投手が1試合で15三振を奪う',
+      game: (r, mine) => mine.some((p) => p.kind === 'pitcher' && p.game && p.game.so >= 15) },
+    { id: 'hr3',      name: '1試合3本塁打',         desc: '自校の打者が1試合で3本の本塁打',
+      game: (r, mine) => mine.some((p) => p.kind !== 'pitcher' && p.game && p.game.hr >= 3) },
+
+    { id: 'promote1', name: '1部昇格',              desc: '1部リーグに上がる',                          check: (s) => divNow(s) === 1 || s.records.team.div[1] > 0 },
+    { id: 'title1',   name: 'リーグ制覇',           desc: '1部リーグで優勝する',                        check: (s) => s.records.team.titles >= 1 },
+    { id: 'title3',   name: '常勝軍団',             desc: '1部リーグで3回優勝する',                     check: (s) => s.records.team.titles >= 3 },
+    { id: 'streak3',  name: '3季連続優勝',          desc: '1部リーグで3季続けて優勝する',               check: (s) => (s.bestStreak || 0) >= 3 },
+    { id: 'natapp',   name: '全国の舞台へ',         desc: '全国大会に出場する',                         check: (s) => s.records.team.natApps >= 1 },
+    { id: 'japan',    name: '日本一',               desc: '全国大会で優勝する',                         check: (s) => s.records.team.natTitles >= 1 },
+    { id: 'wins100',  name: '通算100勝',            desc: '公式戦で通算100勝する',                      check: (s) => s.records.team.w >= 100 },
+    { id: 'year10',   name: '監督10年',             desc: '監督として10年目を迎える',                   check: (s) => s.year - s.startYear >= 9 },
+    { id: 'year20',   name: '名将',                 desc: '監督として20年目を迎える',                   check: (s) => s.year - s.startYear >= 19 },
+    { id: 'pro1',     name: 'プロ輩出',             desc: '教え子がプロ野球に入る',                     check: (s) => s.records.team.pros >= 1 },
+    { id: 'pro10',    name: 'プロ養成所',           desc: '教え子が10人プロ野球に入る',                 check: (s) => s.records.team.pros >= 10 },
+    { id: 'tokutai',  name: '特待生の入部',         desc: '特待生が入部してくれる',                     check: (s) => roster(s).some((p) => p.route === '特待生') },
+    { id: 'awaken',   name: '覚醒',                 desc: '部員が覚醒する',                             check: (s) => roster(s).some((p) => p.awakened) },
+    { id: 'velo155',  name: '剛腕',                 desc: '最速155km/h以上の投手が部にいる',            check: (s) => roster(s).some((p) => p.kind === 'pitcher' && p.velo >= 155) },
+
+    /* ネタバレになるので、達成するまで伏せる */
+    { id: 'soccer',   name: 'まさかの転身',         desc: '野球部がサッカー部になる',   hidden: true,   check: (s) => (s.achievements && s.achievements.soccer) > 0 },
+    { id: 'revived',  name: '野球部復活',           desc: 'サッカー部から野球部に戻る', hidden: true,   check: (s) => (s.achievements && s.achievements.revived) > 0 },
+    { id: 'pro',      name: 'プロへの挑戦',         desc: 'チームごとプロ野球に参戦する', hidden: true, check: (s) => (s.achievements && s.achievements.proEntries) > 0 },
+  ];
+
+  function divNow(s) { return s.divisions && s.userUni ? Universities.divOf(s, s.userUni) : null; }
+  function roster(s) { return s.team ? Team.all(s.team) : []; }
+
+  function unlock(state, t) {
+    state.trophies = state.trophies || {};
+    if (state.trophies[t.id]) return false;
+    state.trophies[t.id] = { y: state.year, t: state.term };
+    (state.trophyQueue = state.trophyQueue || []).push(t.id);
+    return true;
+  }
+
+  /** 試合が終わったとき。mineTeam は試合に出た自校のチーム */
+  function game(state, r, mineTeam) {
+    if (!state || !r || state.mode !== 'college') return;
+    const mine = mineTeam ? Team.all(mineTeam) : [];
+    LIST.forEach((t) => {
+      if (!t.game) return;
+      try { if (t.game(r, mine)) unlock(state, t); } catch (e) { /* 判定できなくても止めない */ }
+    });
+  }
+
+  /** チームの歩みからの判定。画面を出すたびに呼んでよい（軽い） */
+  function check(state) {
+    if (!state || !state.records) return;
+    /* 実績ができる前のデータを初めて読み込んだときは、これまでのぶんを黙って記録する
+       （いきなり十数個のお知らせが並ばないように） */
+    const silent = !state.trophies;
+    state.trophies = state.trophies || {};
+    LIST.forEach((t) => {
+      if (!t.check) return;
+      try { if (t.check(state)) unlock(state, t); } catch (e) { /* 同上 */ }
+    });
+    if (silent) state.trophyQueue = [];
+  }
+
+  /** お知らせするぶんを取り出す（取り出したら消える） */
+  function takeQueue(state) {
+    const q = (state && state.trophyQueue) || [];
+    if (state) state.trophyQueue = [];
+    return q.map(get).filter(Boolean);
+  }
+
+  function get(id) { return LIST.find((t) => t.id === id) || null; }
+
+  /** 一覧（画面用）。伏せるものは、達成するまで名前と条件を隠す */
+  function list(state) {
+    const got = (state && state.trophies) || {};
+    return LIST.map((t) => {
+      const g = got[t.id];
+      const secret = t.hidden && !g;
+      return { id: t.id, name: secret ? '？？？' : t.name, desc: secret ? '条件はまだ秘密' : t.desc, got: g || null, hidden: !!t.hidden };
+    });
+  }
+
+  return { game, check, takeQueue, list, get, LIST };
+})();
+
+</script>
+<script>
+/* ==================================================
    大学野球  college.js
 
    自分の部の「人」のまわり。
@@ -8337,6 +8490,9 @@ const Pro = (() => {
     back.proTeamNames = (state.proTeamNames || back.proTeamNames).slice();
     back.slotMeta = state.slotMeta;
     back.mode = 'college';
+    /* 実績は、プロにいるあいだに達成したものも残す */
+    back.trophies = Object.assign({}, back.trophies || {}, state.trophies || {});
+    back.trophyQueue = (state.trophyQueue || []).slice();
     /* プロにいるあいだに使った変わったエピソードも使用済みのまま */
     back.oddUsed = Array.from(new Set((back.oddUsed || []).concat(state.oddUsed || [])));
     return back;
@@ -8775,9 +8931,11 @@ const Engine = (() => {
       win, draw, myRuns: my.runs, opRuns: op.runs, round: m.label, oppName: m.oppName,
       tourName: m.label, cold: res.cold, walkoff: ctx.walkoff, innings: res.innings,
       winPitcher: findPit('w'), losePitcher: findPit('l'), savePitcher: findPit('sv'), homers,
-      injuries: post.injuries, kind: m.kind,
+      injuries: post.injuries, kind: m.kind, myHits: my.hits, opHits: op.hits,
     };
     state.lastReport = post.report;
+    /* 実績：試合の中で起きたこと（ノーヒットノーラン・サイクル安打など） */
+    if (state.mode === 'college') Trophies.game(state, state.lastResult, view);
 
     if (m.kind === 'league' || m.kind === 'playoff') {
       Records.game(state, m.oppId, my.runs, op.runs);
@@ -12666,6 +12824,7 @@ const CS = (() => {
         '<div><dt>プロ輩出</dt><dd>' + T.pros + '人</dd></div>' +
         '<div><dt>連続リーグ優勝</dt><dd>現在 ' + (state.streak || 0) + '季・最長 ' + (state.bestStreak || 0) + '季</dd></div>' +
       '</div>' +
+      trophyGrid(state) +
       '<h3 class="sub">シーズンごとの成績</h3>' +
       (seasons ? '<div class="tablewrap"><table class="box seasons"><thead><tr><th>シーズン</th><th>所属</th><th>順位</th><th>勝ち点</th><th>勝-敗-分</th><th>入れ替え戦</th><th>全国大会</th><th>日本一</th><th>翌季</th></tr></thead><tbody>' + seasons + '</tbody></table></div>' : '<p class="note">まだシーズンを終えていません。</p>') +
       '<h3 class="sub">プロ入りした選手</h3>' +
@@ -12801,11 +12960,134 @@ const CS = (() => {
       { kind: 'save', onOpen(body) { body.querySelectorAll('[data-slot]').forEach((b) => b.addEventListener('click', () => h.pick(+b.dataset.slot, !!list[+b.dataset.slot - 1]))); } });
   }
 
+  /* ---------- 大学野球ニュース ----------
+     リーグ戦の節が終わったとき、その節の出来事を見出しにする。
+     自校の結果と活躍、各部の首位争い、他校の大勝、格下が勝ち点を奪った波乱 */
+  function news(state) {
+    const se = state.season;
+    if (!se) return '';
+    const r = se.round;
+    const me = state.userUni;
+    const short = (id) => uni(state, id);
+    const items = [];
+    /* 自校 */
+    const mine = League.userCard(se, me, r);
+    if (mine && mine.done) {
+      const opp = mine.a === me ? mine.b : mine.a;
+      const w = mine.a === me ? mine.winsA : mine.winsB, l = mine.a === me ? mine.winsB : mine.winsA;
+      items.push(mine.winner === me
+        ? '<b>' + esc(state.team.name) + '</b>、' + esc(short(opp)) + 'から勝ち点（' + w + '勝' + l + '敗）'
+        : '<b>' + esc(state.team.name) + '</b>、' + esc(short(opp)) + 'に勝ち点を落とす（' + w + '勝' + l + '敗）');
+    }
+    const lr = state.lastResult || {};
+    const hr = (lr.homers || []).filter((x) => x.mine);
+    if (hr.length) items.push(hr.map((x) => esc(x.name) + (x.hr > 1 ? 'が' + x.hr + '本塁打' : 'に一発')).join('、') + '。' + esc(state.team.name) + 'の打線をけん引');
+    if (lr.win && lr.opRuns === 0 && lr.winPitcher && lr.winPitcher.mine) items.push(esc(lr.winPitcher.name) + 'が完封。相手打線を寄せつけず');
+    /* 他校：大勝と波乱 */
+    let big = null, upset = null;
+    [1, 2, 3].forEach((d) => {
+      (se.schedule[d][r] || []).forEach((k) => {
+        const c = se.cards[k];
+        if (c.a === me || c.b === me || !c.done) return;
+        c.games.forEach((g) => {
+          const diff = Math.abs(g.a - g.b);
+          if (!big || diff > big.diff) big = { diff, win: g.a > g.b ? c.a : c.b, lose: g.a > g.b ? c.b : c.a, sw: Math.max(g.a, g.b), sl: Math.min(g.a, g.b), d };
+        });
+        const loser = c.winner === c.a ? c.b : c.a;
+        const gap = (state.unis[loser].level || 0) - (state.unis[c.winner].level || 0);
+        if (gap >= 4 && (!upset || gap > upset.gap)) upset = { gap, win: c.winner, lose: loser, d };
+      });
+    });
+    if (upset) items.push('<b>波乱</b>　' + upset.d + '部：' + esc(short(upset.win)) + 'が格上の' + esc(short(upset.lose)) + 'から勝ち点');
+    if (big && big.diff >= 7) items.push(big.d + '部：' + esc(short(big.win)) + 'が' + esc(short(big.lose)) + 'に' + big.sw + '-' + big.sl + 'で大勝');
+    /* 各部の首位争い */
+    [1, 2, 3].forEach((d) => {
+      const st = League.standings(se, d);
+      const top = st.filter((x) => x.points === st[0].points);
+      const last = r >= 4;
+      if (last) {
+        items.push(d + '部：<b>' + esc(short(st[0].id)) + '</b>が優勝（勝ち点' + st[0].points + '）');
+      } else if (top.length === 1) {
+        items.push(d + '部：' + esc(short(top[0].id)) + 'が勝ち点' + top[0].points + 'で単独首位');
+      } else {
+        items.push(d + '部：' + top.slice(0, 3).map((x) => esc(short(x.id))).join('・') + (top.length > 3 ? 'ほか' : '') + 'が勝ち点' + top[0].points + 'で並ぶ');
+      }
+    });
+    return '<section class="news"><h4 class="news__title">大学野球ニュース<small>' + state.year + '年' + (se.term === 'spring' ? '春' : '秋') + '　第' + (r + 1) + '節</small></h4>' +
+      '<ul class="news__list">' + items.map((x, i) => '<li' + (i === 0 ? ' class="is-top"' : '') + '>' + x + '</li>').join('') + '</ul></section>';
+  }
+
+  /** 実績の一覧。達成したものは金色、まだのものは薄く。伏せているものは「？？？」 */
+  function trophyGrid(state) {
+    const all = Trophies.list(state);
+    const got = all.filter((t) => t.got).length;
+    return '<h3 class="sub">実績（' + got + ' / ' + all.length + '）</h3>' +
+      '<div class="trophies">' + all.map((t) =>
+        '<div class="trophy' + (t.got ? ' is-got' : '') + '">' +
+          '<span class="trophy__icon" aria-hidden="true">' + (t.got ? '🏆' : '・') + '</span>' +
+          '<b class="trophy__name">' + esc(t.name) + '</b>' +
+          '<span class="trophy__desc">' + esc(t.desc) + '</span>' +
+          (t.got ? '<span class="trophy__when">' + t.got.y + '年' + (t.got.t === 'spring' ? '春' : '秋') + '</span>' : '') +
+        '</div>').join('') + '</div>';
+  }
+
+  /* ---------- 試合前の対戦カード ----------
+     両チームの打線・先発・守備・総合を並べ、相手の注目選手と対戦成績を出す。
+     自校のオーダーに苦手な守備位置の選手がいれば、ここで知らせる */
+  function matchup(state, view) {
+    const opp = state.opponent;
+    const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+    const side = (t) => {
+      const bats = t.lineup.map((sl) => Team.find(t, sl.pid)).filter(Boolean);
+      const sp = Team.find(t, t.rotation[0]);
+      return {
+        bat: Math.round(avg(bats.map(Player.rating))),
+        pit: sp ? Math.round(Player.rating(sp)) : 0,
+        def: Math.round(Sim.defenseOf(t, t.rotation[0]) * 100),
+        all: Team.strength(t),
+        sp, bats,
+      };
+    };
+    const me = side(view), op = side(opp);
+    const bar = (label, a, b) => {
+      const tot = Math.max(1, a + b);
+      const pa = Math.round(a / tot * 100);
+      const cls = a - b >= 4 ? ' is-good' : (b - a >= 4 ? ' is-bad' : '');
+      return '<div class="mu__row' + cls + '"><span class="mu__v">' + a + '</span>' +
+        '<span class="mu__bar"><i class="mu__me" style="width:' + pa + '%"></i><i class="mu__op" style="width:' + (100 - pa) + '%"></i></span>' +
+        '<span class="mu__v">' + b + '</span><span class="mu__lb">' + label + '</span></div>';
+    };
+    const d = me.all - op.all;
+    const look = d >= 6 ? ['優勢', 'good'] : d >= 2 ? ['やや優勢', 'good'] : d > -2 ? ['互角', ''] : d > -6 ? ['やや劣勢', 'bad'] : ['劣勢', 'bad'];
+    /* 苦手な守備位置（適性E以下、または左投げで捕手・内野） */
+    const misfits = view.lineup.map((sl) => {
+      const p = Team.find(view, sl.pid);
+      if (!p || sl.pos === 'DH') return null;
+      const left = p.throws === 'L' && Player.RIGHT_ONLY.indexOf(sl.pos) >= 0;
+      const apt = p.apt ? p.apt[sl.pos] : 'G';
+      if (!left && 'EFG'.indexOf(apt) < 0) return null;
+      return esc(p.name) + '（' + posName(sl.pos) + '・' + (left ? '左投げ' : '適性' + apt) + '）';
+    }).filter(Boolean);
+    /* 相手の注目：先発予定と、打線でいちばん怖い打者 */
+    const star = op.bats.slice().sort((a, b) => Player.rating(b) - Player.rating(a))[0];
+    const starNo = star ? opp.lineup.findIndex((sl) => sl.pid === star.id) + 1 : 0;
+    const h = state.records && state.records.h2h && state.records.h2h[state.match.oppId];
+    return '<section class="matchup">' +
+      '<div class="mu__head"><b>' + esc(state.team.name) + '</b><span class="mu__look ' + look[1] + '">見立て：' + look[0] + '</span><b>' + esc(opp.name) + '</b></div>' +
+      bar('総合', me.all, op.all) + bar('打線', me.bat, op.bat) + bar('先発', me.pit, op.pit) + bar('守備', me.def, op.def) +
+      (misfits.length ? '<p class="mu__warn">苦手な守備位置の選手がいます：' + misfits.join('、') + '。守備が崩れ、大量失点しやすくなります。</p>' : '') +
+      '<ul class="mu__notes">' +
+        (op.sp ? '<li>相手の先発予定：<b>' + esc(op.sp.name) + '</b>（' + op.sp.grade + '年・最速' + op.sp.velo + 'km/h・制球' + rankOf(op.sp.control) + '）</li>' : '') +
+        (star ? '<li>相手の注目打者：<b>' + esc(star.name) + '</b>（' + starNo + '番・' + posName(star.pos) + '・ミート' + rankOf(star.meet) + ' パワー' + rankOf(star.power) + '）</li>' : '') +
+        (h && (h.w + h.l + h.d) ? '<li>これまでの対戦：' + h.w + '勝' + h.l + '敗' + (h.d ? h.d + '分' : '') + '</li>' : '') +
+      '</ul></section>';
+  }
+
   return {
     cardLineHtml: (state, c) => cardLine(state, c),
     show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
-    disband, proChoice, saveBox, dateText, bracket,
+    disband, proChoice, saveBox, dateText, bracket, matchup, news,
   };
 })();
 
@@ -13228,9 +13510,33 @@ const App = (() => {
 
   const GAME_STEPS = ['pregame', 'game', 'verdict', 'growth', 'result'];
 
+  /* 実績を達成したら、画面の下に1つずつ知らせる */
+  function trophyNotice() {
+    if (!state) return;
+    Trophies.check(state);
+    const got = Trophies.takeQueue(state);
+    if (!got.length) return;
+    save();
+    const box = document.getElementById('trophybar') || (() => {
+      const b = document.createElement('div'); b.id = 'trophybar'; b.className = 'trophybar'; b.setAttribute('role', 'status');
+      document.body.appendChild(b); return b;
+    })();
+    got.forEach((t, i) => {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'trophybar__i';
+        el.innerHTML = '<span class="trophybar__icon" aria-hidden="true">🏆</span><span><small>実績を達成</small><b>' + UI.esc(t.name) + '</b></span>';
+        box.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('is-on'));
+        setTimeout(() => { el.classList.remove('is-on'); setTimeout(() => el.remove(), 400); }, 3200);
+      }, i * 700);
+    });
+  }
+
   function render() {
     if (!state) { showSlots(); return; }
     setChrome(true);
+    trophyNotice();
     CS.setNav('main');
     if (state.mode === 'college' && state.team) {
       try { Engine.check(state); } catch (e) { console.error(e); }
@@ -13386,6 +13692,7 @@ const App = (() => {
       const mineA = c.a === state.userUni;
       extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
+    if (state.opponent && state.mode === 'college') extra += CS.matchup(state, view);
     Screens.pregame(state, { view, extra });
     /* まとめて進めるボタンは、リーグ戦と入れ替え戦だけ */
     UI.el('btn-auto-card').hidden = !(m.kind === 'league' || m.kind === 'playoff');
@@ -13497,6 +13804,7 @@ const App = (() => {
       const div = Universities.divOf(state, state.userUni);
       const se = state.season;
       if (r.card && r.card.done) {
+        extra += CS.news(state);
         extra += '<h4 class="sub">この節の結果</h4><ul class="cardlist">' + (se.schedule[div][se.round] || []).map((k) => CS.cardLineHtml(state, se.cards[k])).join('') + '</ul>';
       }
       extra += '<h4 class="sub">' + div + '部　順位表</h4>' + CS.standingsTable(state, se, div);
@@ -13506,6 +13814,7 @@ const App = (() => {
     const label = nextLabel();
     UI.el('btn-result-next').textContent = label;
     UI.el('btn-result-next-top').textContent = label;
+    trophyNotice();   // 試合で達成した実績は、その試合の結果画面で知らせる
   }
 
   /** 結果画面のボタンに「次に何が起きるか」を書く */

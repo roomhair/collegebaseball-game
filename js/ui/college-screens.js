@@ -668,6 +668,7 @@ const CS = (() => {
         '<div><dt>プロ輩出</dt><dd>' + T.pros + '人</dd></div>' +
         '<div><dt>連続リーグ優勝</dt><dd>現在 ' + (state.streak || 0) + '季・最長 ' + (state.bestStreak || 0) + '季</dd></div>' +
       '</div>' +
+      trophyGrid(state) +
       '<h3 class="sub">シーズンごとの成績</h3>' +
       (seasons ? '<div class="tablewrap"><table class="box seasons"><thead><tr><th>シーズン</th><th>所属</th><th>順位</th><th>勝ち点</th><th>勝-敗-分</th><th>入れ替え戦</th><th>全国大会</th><th>日本一</th><th>翌季</th></tr></thead><tbody>' + seasons + '</tbody></table></div>' : '<p class="note">まだシーズンを終えていません。</p>') +
       '<h3 class="sub">プロ入りした選手</h3>' +
@@ -803,10 +804,133 @@ const CS = (() => {
       { kind: 'save', onOpen(body) { body.querySelectorAll('[data-slot]').forEach((b) => b.addEventListener('click', () => h.pick(+b.dataset.slot, !!list[+b.dataset.slot - 1]))); } });
   }
 
+  /* ---------- 大学野球ニュース ----------
+     リーグ戦の節が終わったとき、その節の出来事を見出しにする。
+     自校の結果と活躍、各部の首位争い、他校の大勝、格下が勝ち点を奪った波乱 */
+  function news(state) {
+    const se = state.season;
+    if (!se) return '';
+    const r = se.round;
+    const me = state.userUni;
+    const short = (id) => uni(state, id);
+    const items = [];
+    /* 自校 */
+    const mine = League.userCard(se, me, r);
+    if (mine && mine.done) {
+      const opp = mine.a === me ? mine.b : mine.a;
+      const w = mine.a === me ? mine.winsA : mine.winsB, l = mine.a === me ? mine.winsB : mine.winsA;
+      items.push(mine.winner === me
+        ? '<b>' + esc(state.team.name) + '</b>、' + esc(short(opp)) + 'から勝ち点（' + w + '勝' + l + '敗）'
+        : '<b>' + esc(state.team.name) + '</b>、' + esc(short(opp)) + 'に勝ち点を落とす（' + w + '勝' + l + '敗）');
+    }
+    const lr = state.lastResult || {};
+    const hr = (lr.homers || []).filter((x) => x.mine);
+    if (hr.length) items.push(hr.map((x) => esc(x.name) + (x.hr > 1 ? 'が' + x.hr + '本塁打' : 'に一発')).join('、') + '。' + esc(state.team.name) + 'の打線をけん引');
+    if (lr.win && lr.opRuns === 0 && lr.winPitcher && lr.winPitcher.mine) items.push(esc(lr.winPitcher.name) + 'が完封。相手打線を寄せつけず');
+    /* 他校：大勝と波乱 */
+    let big = null, upset = null;
+    [1, 2, 3].forEach((d) => {
+      (se.schedule[d][r] || []).forEach((k) => {
+        const c = se.cards[k];
+        if (c.a === me || c.b === me || !c.done) return;
+        c.games.forEach((g) => {
+          const diff = Math.abs(g.a - g.b);
+          if (!big || diff > big.diff) big = { diff, win: g.a > g.b ? c.a : c.b, lose: g.a > g.b ? c.b : c.a, sw: Math.max(g.a, g.b), sl: Math.min(g.a, g.b), d };
+        });
+        const loser = c.winner === c.a ? c.b : c.a;
+        const gap = (state.unis[loser].level || 0) - (state.unis[c.winner].level || 0);
+        if (gap >= 4 && (!upset || gap > upset.gap)) upset = { gap, win: c.winner, lose: loser, d };
+      });
+    });
+    if (upset) items.push('<b>波乱</b>　' + upset.d + '部：' + esc(short(upset.win)) + 'が格上の' + esc(short(upset.lose)) + 'から勝ち点');
+    if (big && big.diff >= 7) items.push(big.d + '部：' + esc(short(big.win)) + 'が' + esc(short(big.lose)) + 'に' + big.sw + '-' + big.sl + 'で大勝');
+    /* 各部の首位争い */
+    [1, 2, 3].forEach((d) => {
+      const st = League.standings(se, d);
+      const top = st.filter((x) => x.points === st[0].points);
+      const last = r >= 4;
+      if (last) {
+        items.push(d + '部：<b>' + esc(short(st[0].id)) + '</b>が優勝（勝ち点' + st[0].points + '）');
+      } else if (top.length === 1) {
+        items.push(d + '部：' + esc(short(top[0].id)) + 'が勝ち点' + top[0].points + 'で単独首位');
+      } else {
+        items.push(d + '部：' + top.slice(0, 3).map((x) => esc(short(x.id))).join('・') + (top.length > 3 ? 'ほか' : '') + 'が勝ち点' + top[0].points + 'で並ぶ');
+      }
+    });
+    return '<section class="news"><h4 class="news__title">大学野球ニュース<small>' + state.year + '年' + (se.term === 'spring' ? '春' : '秋') + '　第' + (r + 1) + '節</small></h4>' +
+      '<ul class="news__list">' + items.map((x, i) => '<li' + (i === 0 ? ' class="is-top"' : '') + '>' + x + '</li>').join('') + '</ul></section>';
+  }
+
+  /** 実績の一覧。達成したものは金色、まだのものは薄く。伏せているものは「？？？」 */
+  function trophyGrid(state) {
+    const all = Trophies.list(state);
+    const got = all.filter((t) => t.got).length;
+    return '<h3 class="sub">実績（' + got + ' / ' + all.length + '）</h3>' +
+      '<div class="trophies">' + all.map((t) =>
+        '<div class="trophy' + (t.got ? ' is-got' : '') + '">' +
+          '<span class="trophy__icon" aria-hidden="true">' + (t.got ? '🏆' : '・') + '</span>' +
+          '<b class="trophy__name">' + esc(t.name) + '</b>' +
+          '<span class="trophy__desc">' + esc(t.desc) + '</span>' +
+          (t.got ? '<span class="trophy__when">' + t.got.y + '年' + (t.got.t === 'spring' ? '春' : '秋') + '</span>' : '') +
+        '</div>').join('') + '</div>';
+  }
+
+  /* ---------- 試合前の対戦カード ----------
+     両チームの打線・先発・守備・総合を並べ、相手の注目選手と対戦成績を出す。
+     自校のオーダーに苦手な守備位置の選手がいれば、ここで知らせる */
+  function matchup(state, view) {
+    const opp = state.opponent;
+    const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+    const side = (t) => {
+      const bats = t.lineup.map((sl) => Team.find(t, sl.pid)).filter(Boolean);
+      const sp = Team.find(t, t.rotation[0]);
+      return {
+        bat: Math.round(avg(bats.map(Player.rating))),
+        pit: sp ? Math.round(Player.rating(sp)) : 0,
+        def: Math.round(Sim.defenseOf(t, t.rotation[0]) * 100),
+        all: Team.strength(t),
+        sp, bats,
+      };
+    };
+    const me = side(view), op = side(opp);
+    const bar = (label, a, b) => {
+      const tot = Math.max(1, a + b);
+      const pa = Math.round(a / tot * 100);
+      const cls = a - b >= 4 ? ' is-good' : (b - a >= 4 ? ' is-bad' : '');
+      return '<div class="mu__row' + cls + '"><span class="mu__v">' + a + '</span>' +
+        '<span class="mu__bar"><i class="mu__me" style="width:' + pa + '%"></i><i class="mu__op" style="width:' + (100 - pa) + '%"></i></span>' +
+        '<span class="mu__v">' + b + '</span><span class="mu__lb">' + label + '</span></div>';
+    };
+    const d = me.all - op.all;
+    const look = d >= 6 ? ['優勢', 'good'] : d >= 2 ? ['やや優勢', 'good'] : d > -2 ? ['互角', ''] : d > -6 ? ['やや劣勢', 'bad'] : ['劣勢', 'bad'];
+    /* 苦手な守備位置（適性E以下、または左投げで捕手・内野） */
+    const misfits = view.lineup.map((sl) => {
+      const p = Team.find(view, sl.pid);
+      if (!p || sl.pos === 'DH') return null;
+      const left = p.throws === 'L' && Player.RIGHT_ONLY.indexOf(sl.pos) >= 0;
+      const apt = p.apt ? p.apt[sl.pos] : 'G';
+      if (!left && 'EFG'.indexOf(apt) < 0) return null;
+      return esc(p.name) + '（' + posName(sl.pos) + '・' + (left ? '左投げ' : '適性' + apt) + '）';
+    }).filter(Boolean);
+    /* 相手の注目：先発予定と、打線でいちばん怖い打者 */
+    const star = op.bats.slice().sort((a, b) => Player.rating(b) - Player.rating(a))[0];
+    const starNo = star ? opp.lineup.findIndex((sl) => sl.pid === star.id) + 1 : 0;
+    const h = state.records && state.records.h2h && state.records.h2h[state.match.oppId];
+    return '<section class="matchup">' +
+      '<div class="mu__head"><b>' + esc(state.team.name) + '</b><span class="mu__look ' + look[1] + '">見立て：' + look[0] + '</span><b>' + esc(opp.name) + '</b></div>' +
+      bar('総合', me.all, op.all) + bar('打線', me.bat, op.bat) + bar('先発', me.pit, op.pit) + bar('守備', me.def, op.def) +
+      (misfits.length ? '<p class="mu__warn">苦手な守備位置の選手がいます：' + misfits.join('、') + '。守備が崩れ、大量失点しやすくなります。</p>' : '') +
+      '<ul class="mu__notes">' +
+        (op.sp ? '<li>相手の先発予定：<b>' + esc(op.sp.name) + '</b>（' + op.sp.grade + '年・最速' + op.sp.velo + 'km/h・制球' + rankOf(op.sp.control) + '）</li>' : '') +
+        (star ? '<li>相手の注目打者：<b>' + esc(star.name) + '</b>（' + starNo + '番・' + posName(star.pos) + '・ミート' + rankOf(star.meet) + ' パワー' + rankOf(star.power) + '）</li>' : '') +
+        (h && (h.w + h.l + h.d) ? '<li>これまでの対戦：' + h.w + '勝' + h.l + '敗' + (h.d ? h.d + '分' : '') + '</li>' : '') +
+      '</ul></section>';
+  }
+
   return {
     cardLineHtml: (state, c) => cardLine(state, c),
     show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
-    disband, proChoice, saveBox, dateText, bracket,
+    disband, proChoice, saveBox, dateText, bracket, matchup, news,
   };
 })();

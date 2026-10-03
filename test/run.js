@@ -3,7 +3,7 @@
 const { load } = require('./load');
 const { makeAuto } = require('./auto');
 const G = load();
-const { Engine, Team, Player, League, Universities, College, Incidents, Records, Soccer, Pro, Storage, CONFIG, Rivals } = G;
+const { Engine, Team, Player, League, Universities, College, Incidents, Records, Soccer, Pro, Storage, CONFIG, Rivals, Trophies } = G;
 
 /* 仕組みのテスト（昇格・卒業・セーブなど）は、途中でサッカー部へ移ると確かめられないので、
    以前のやさしい強さ（1部57・2部49・3部41）で回す。いまの強さでの順位の偏りは test/sym.js で測る */
@@ -583,6 +583,33 @@ section('古いデータは、各大学の強さを新しい目安へ一度だ�
   Universities.rebalance(o2);
   ok(o2.unis[rid].level > lv0 + 3, '部員を保存している3部の大学も強くなる（' + lv0 + '→' + o2.unis[rid].level + '）');
   Rivals.check(o2);
+}
+
+/* ---------- 実績 ---------- */
+section('実績：試合や歩みで達成し、お知らせは1回だけ。ネタバレは伏せる');
+{
+  const s = Engine.newGame();
+  const A = makeAuto(G, {});
+  Trophies.check(s);
+  ok(Object.keys(s.trophies).length === 0, '始めたばかりでは何も達成していない');
+  runUntil(s, A, (x) => x.records.team.w >= 1 && x.step !== 'game', 20000);
+  Trophies.check(s);
+  ok(!!s.trophies.win1, '初勝利で「初勝利」を達成');
+  const q = Trophies.takeQueue(s);
+  ok(q.some((t) => t.id === 'win1') && Trophies.takeQueue(s).length === 0, 'お知らせは1回だけ');
+  /* 試合の中の出来事 */
+  const fake = { win: true, myRuns: 12, opRuns: 0, opHits: 0, walkoff: false };
+  Trophies.game(s, fake, s.team);
+  ok(s.trophies.nohit && s.trophies.shutout && s.trophies.big10, 'ノーヒットノーラン・完封・2桁得点を判定');
+  /* 伏せる実績 */
+  const hid = Trophies.list(s).filter((t) => t.hidden);
+  ok(hid.length >= 3 && hid.every((t) => t.name === '？？？' && !/サッカー|プロ/.test(t.desc)), '達成前の隠し実績は名前も条件も伏せる');
+  s.achievements.soccer = 1; Trophies.check(s);
+  ok(Trophies.list(s).find((t) => t.id === 'soccer').name !== '？？？', '達成すると名前が見える');
+  /* 実績ができる前のデータ：これまでのぶんは黙って記録する */
+  const old = JSON.parse(JSON.stringify(s)); delete old.trophies; old.trophyQueue = [];
+  Trophies.check(old);
+  ok(old.trophies.win1 && Trophies.takeQueue(old).length === 0, '古いデータは、これまでの実績をお知らせなしで記録');
 }
 
 CONFIG.LEVEL.DIV_BASE = { 1: 57, 2: 49, 3: 41 };

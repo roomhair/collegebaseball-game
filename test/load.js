@@ -7,7 +7,7 @@ const vm = require('vm');
 
 const FILES = [
   'config', 'rng', 'names', 'player', 'team', 'sim', 'training', 'growth', 'persona',
-  'universities', 'rivals', 'league', 'national', 'records', 'college', 'scouting', 'incidents',
+  'universities', 'rivals', 'league', 'national', 'records', 'trophies', 'college', 'scouting', 'incidents',
   'soccer', 'pro', 'engine', 'storage',
 ];
 
@@ -28,7 +28,7 @@ function load() {
     const p = path.join(__dirname, '..', 'js', 'engine', f + '.js');
     if (fs.existsSync(p)) src += fs.readFileSync(p, 'utf8') + '\n';
   });
-  src += '\n;this.__exp = { CONFIG, RNG, NAMES, Player, Team, Sim, Training, Growth, Persona, Universities, League, National, Records, College, Scouting, Incidents, Engine, Rivals,' +
+  src += '\n;this.__exp = { CONFIG, RNG, NAMES, Player, Team, Sim, Training, Growth, Persona, Universities, League, National, Records, College, Scouting, Incidents, Engine, Rivals, Trophies,' +
     ' Soccer: typeof Soccer !== "undefined" ? Soccer : null, Pro: typeof Pro !== "undefined" ? Pro : null, Storage: typeof Storage !== "undefined" ? Storage : null, rankOf };';
   vm.runInContext(src, ctx, { filename: 'engine-bundle.js' });
   const exp = ctx.__exp;
