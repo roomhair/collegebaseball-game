@@ -260,7 +260,6 @@ const App = (() => {
     Screens.pregame(state, { view, extra });
     /* まとめて進めるボタンは、リーグ戦と入れ替え戦だけ */
     UI.el('btn-auto-card').hidden = !(m.kind === 'league' || m.kind === 'playoff');
-    UI.el('btn-auto-league').hidden = m.kind !== 'league';
   }
 
   function playLive() {
@@ -327,18 +326,6 @@ const App = (() => {
       cardGames: r.games } };
     afterGameCurtain();
     showResult();
-  }
-
-  /** リーグ戦の残りをまとめておまかせ。出来事が起きたらそこで止まる */
-  function autoLeaguePlay() {
-    if (!state || state.step !== 'pregame') return;
-    UI.confirmBox({ title: 'リーグ戦の残りをおまかせ', body: 'このカードからリーグ戦の最後まで、結果だけで進めます。不祥事などの出来事が起きたら、そこで一旦止まります。', yes: 'おまかせで進める' }, () => {
-      const sum = Engine.autoLeague(state);
-      lastSim = null;
-      save();
-      toast(sum.games + '試合をおまかせで進めました（' + sum.w + '勝' + sum.l + '敗' + (sum.d ? sum.d + '分' : '') + '）' + (sum.stopped ? '。出来事が起きたので止めました' : ''));
-      render();
-    });
   }
 
   function afterGameCurtain() {
@@ -418,15 +405,19 @@ const App = (() => {
     if (ph === 'SOCCER_SEASON') {
       if (st === 'round') {
         if (S.league.done) { Soccer.finishSeason(state); save(); render(); return; }
+        /* watch：試合の様子を見る。false なら結果だけ（野球の「おまかせ」と同じ） */
+        const play = (watch) => {
+          const res = Soccer.playUser(state);
+          Soccer.recordRound(state, res);
+          state.step = 'result';
+          save();
+          soccerShown = res;
+          if (watch) SS.match(state, res, () => SS.matchResult(state, res, { next: soccerNext }));
+          else SS.matchResult(state, res, { next: soccerNext });
+        };
         SS.round(state, {
-          go() {
-            const res = Soccer.playUser(state);
-            Soccer.recordRound(state, res);
-            state.step = 'result';
-            save();
-            soccerShown = res;
-            SS.match(state, res, () => SS.matchResult(state, res, { next: soccerNext }));
-          },
+          go: () => play(true),
+          auto: () => play(false),
           xi: () => SS.xiEditor(state, () => { save(); render(); }),
         });
         return;
@@ -439,15 +430,18 @@ const App = (() => {
     }
     if (ph === 'SOCCER_NATIONAL') {
       if (st === 'result' && S.lastMatch) { SS.matchResult(state, S.lastMatch, { next: after(() => { state.step = 'round'; }) }); return; }
+      const playNat = (watch) => {
+        const o = Soccer.natOpponent(state);
+        const res = Soccer.playUser(state, o);
+        Soccer.natAfterUser(state, res);
+        state.step = 'result';
+        save();
+        const show = () => SS.matchResult(state, res, { next: after(() => { state.step = 'round'; }) });
+        if (watch) SS.match(state, res, show); else show();
+      };
       SS.national(state, {
-        go() {
-          const o = Soccer.natOpponent(state);
-          const res = Soccer.playUser(state, o);
-          Soccer.natAfterUser(state, res);
-          state.step = 'result';
-          save();
-          SS.match(state, res, () => SS.matchResult(state, res, { next: after(() => { state.step = 'round'; }) }));
-        },
+        go: () => playNat(true),
+        auto: () => playNat(false),
         end: after(() => Soccer.closeNational(state)),
         xi: () => SS.xiEditor(state, () => { save(); render(); }),
       });
@@ -604,7 +598,6 @@ const App = (() => {
     on('btn-play', playLive);
     on('btn-auto', autoPlay);
     on('btn-auto-card', autoCardPlay);
-    on('btn-auto-league', autoLeaguePlay);
     on('btn-result-next-top', resultNext);
     on('btn-pregame-lineup', () => UI.lineupEditor(view, () => { College.syncBack(state, view); save(); showPregame(); }));
     on('btn-skip', () => GameScreen.skip());
