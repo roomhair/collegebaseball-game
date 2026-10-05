@@ -257,7 +257,6 @@ const App = (() => {
       const mineA = c.a === state.userUni;
       extra = '<p class="cardstat">第' + (c.games.length + 1) + '戦　このカード <b>' + (mineA ? c.winsA : c.winsB) + '勝' + (mineA ? c.winsB : c.winsA) + '敗' + (c.draws ? c.draws + '分' : '') + '</b></p>';
     }
-    if (state.opponent && state.mode === 'college') extra += CS.matchup(state, view);
     Screens.pregame(state, { view, extra });
     /* まとめて進めるボタンは、リーグ戦と入れ替え戦だけ */
     UI.el('btn-auto-card').hidden = !(m.kind === 'league' || m.kind === 'playoff');
