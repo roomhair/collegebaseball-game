@@ -256,23 +256,6 @@ body { background: var(--bg); color: var(--ink); }
 .good { color: var(--accent); }
 .bad { color: var(--ng); }
 
-/* ---------- 試合前の対戦カード ---------- */
-.matchup { border: 1.5px solid var(--navy); padding: 10px 12px; margin: 4px 0 12px; background: var(--panel); }
-.mu__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 14px; }
-.mu__head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mu__look { font-weight: 700; font-size: 15px; white-space: nowrap; }
-.mu__look.good, .mu__row.is-good .mu__v:first-child { color: var(--accent); }
-.mu__look.bad, .mu__row.is-bad .mu__v:nth-of-type(3) { color: #b03a2e; }
-.mu__row { display: grid; grid-template-columns: 2.4em 1fr 2.4em 2.6em; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; font-size: 13px; margin: 3px 0; }
-.mu__v { text-align: center; font-weight: 700; }
-.mu__lb { color: var(--ink-mute); font-size: 12px; }
-.mu__bar { display: flex; height: 10px; background: var(--line); overflow: hidden; }
-.mu__me { background: var(--accent); }
-.mu__op { background: var(--ink-faint, #999); opacity: .55; }
-.mu__warn { margin: 8px 0 0; padding: 6px 8px; border-left: 3px solid #b03a2e; color: #b03a2e; font-size: 13px; background: rgba(176, 58, 46, .06); }
-.mu__notes { margin: 8px 0 0; padding-left: 1.2em; font-size: 13px; }
-.mu__notes li { margin: 2px 0; }
-
 /* ---------- 実績 ---------- */
 .trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 6px 0 14px; }
 .trophy { border: 1px dashed var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; opacity: .6; min-width: 0; }

@@ -875,62 +875,10 @@ const CS = (() => {
         '</div>').join('') + '</div>';
   }
 
-  /* ---------- 試合前の対戦カード ----------
-     両チームの打線・先発・守備・総合を並べ、相手の注目選手と対戦成績を出す。
-     自校のオーダーに苦手な守備位置の選手がいれば、ここで知らせる */
-  function matchup(state, view) {
-    const opp = state.opponent;
-    const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
-    const side = (t) => {
-      const bats = t.lineup.map((sl) => Team.find(t, sl.pid)).filter(Boolean);
-      const sp = Team.find(t, t.rotation[0]);
-      return {
-        bat: Math.round(avg(bats.map(Player.rating))),
-        pit: sp ? Math.round(Player.rating(sp)) : 0,
-        def: Math.round(Sim.defenseOf(t, t.rotation[0]) * 100),
-        all: Team.strength(t),
-        sp, bats,
-      };
-    };
-    const me = side(view), op = side(opp);
-    const bar = (label, a, b) => {
-      const tot = Math.max(1, a + b);
-      const pa = Math.round(a / tot * 100);
-      const cls = a - b >= 4 ? ' is-good' : (b - a >= 4 ? ' is-bad' : '');
-      return '<div class="mu__row' + cls + '"><span class="mu__v">' + a + '</span>' +
-        '<span class="mu__bar"><i class="mu__me" style="width:' + pa + '%"></i><i class="mu__op" style="width:' + (100 - pa) + '%"></i></span>' +
-        '<span class="mu__v">' + b + '</span><span class="mu__lb">' + label + '</span></div>';
-    };
-    const d = me.all - op.all;
-    const look = d >= 6 ? ['優勢', 'good'] : d >= 2 ? ['やや優勢', 'good'] : d > -2 ? ['互角', ''] : d > -6 ? ['やや劣勢', 'bad'] : ['劣勢', 'bad'];
-    /* 苦手な守備位置（適性E以下、または左投げで捕手・内野） */
-    const misfits = view.lineup.map((sl) => {
-      const p = Team.find(view, sl.pid);
-      if (!p || sl.pos === 'DH') return null;
-      const left = p.throws === 'L' && Player.RIGHT_ONLY.indexOf(sl.pos) >= 0;
-      const apt = p.apt ? p.apt[sl.pos] : 'G';
-      if (!left && 'EFG'.indexOf(apt) < 0) return null;
-      return esc(p.name) + '（' + posName(sl.pos) + '・' + (left ? '左投げ' : '適性' + apt) + '）';
-    }).filter(Boolean);
-    /* 相手の注目：先発予定と、打線でいちばん怖い打者 */
-    const star = op.bats.slice().sort((a, b) => Player.rating(b) - Player.rating(a))[0];
-    const starNo = star ? opp.lineup.findIndex((sl) => sl.pid === star.id) + 1 : 0;
-    const h = state.records && state.records.h2h && state.records.h2h[state.match.oppId];
-    return '<section class="matchup">' +
-      '<div class="mu__head"><b>' + esc(state.team.name) + '</b><span class="mu__look ' + look[1] + '">見立て：' + look[0] + '</span><b>' + esc(opp.name) + '</b></div>' +
-      bar('総合', me.all, op.all) + bar('打線', me.bat, op.bat) + bar('先発', me.pit, op.pit) + bar('守備', me.def, op.def) +
-      (misfits.length ? '<p class="mu__warn">苦手な守備位置の選手がいます：' + misfits.join('、') + '。守備が崩れ、大量失点しやすくなります。</p>' : '') +
-      '<ul class="mu__notes">' +
-        (op.sp ? '<li>相手の先発予定：<b>' + esc(op.sp.name) + '</b>（' + op.sp.grade + '年・最速' + op.sp.velo + 'km/h・制球' + rankOf(op.sp.control) + '）</li>' : '') +
-        (star ? '<li>相手の注目打者：<b>' + esc(star.name) + '</b>（' + starNo + '番・' + posName(star.pos) + '・ミート' + rankOf(star.meet) + ' パワー' + rankOf(star.power) + '）</li>' : '') +
-        (h && (h.w + h.l + h.d) ? '<li>これまでの対戦：' + h.w + '勝' + h.l + '敗' + (h.d ? h.d + '分' : '') + '</li>' : '') +
-      '</ul></section>';
-  }
-
   return {
     cardLineHtml: (state, c) => cardLine(state, c),
     show, playoffResult, slots, newGameForm, status, setNav, standingsTable, round, cardEnd, final, nationalOpen, nationalEnd,
     pending, pendingResult, scouting, retirement, arrivals, team, league, records, history, settings,
-    disband, proChoice, saveBox, dateText, bracket, matchup, news,
+    disband, proChoice, saveBox, dateText, bracket, news,
   };
 })();
