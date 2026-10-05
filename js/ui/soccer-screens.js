@@ -94,10 +94,10 @@ const SS = (() => {
     CS.show('<h2 class="section-title">' + esc(state.names.soccerLeague) + '　' + d + '部　第' + (S.league.round + 1) + '節</h2>' +
       '<div class="vsbox"><p class="vsbox__vs">' + (f.home ? esc(Soccer.teamName(state, state.userUni)) + '　<i>対</i>　<b>' + esc(Soccer.teamName(state, f.oppId)) + '</b>' : '<b>' + esc(Soccer.teamName(state, f.oppId)) + '</b>　<i>対</i>　' + esc(Soccer.teamName(state, state.userUni))) + '</p>' +
       '<p class="note">' + (f.home ? 'ホーム' : 'アウェー') + '。勝ち3・分け1・負け0。全10節。チーム力 ' + Soccer.strength(state) + '</p>' +
-      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="sr-go">キックオフ</button><button type="button" class="btn" id="sr-xi">先発を変える</button></div></div>' +
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="sr-go">キックオフ</button><button type="button" class="btn" id="sr-auto">この試合をおまかせ</button><button type="button" class="btn" id="sr-xi">先発を変える</button></div></div>' +
       '<h3 class="sub">先発11人（4-4-2）</h3><ul class="xi">' + xi.map((x) => '<li><i>' + x.pos + '</i>' + esc(x.name) + '<b>' + Math.round(Soccer.rateFor(x.s, x.pos)) + '</b></li>').join('') + '</ul>' +
       '<h3 class="sub">' + d + '部　順位表</h3>' + table(state, d),
-      (root) => { on(root, '#sr-go', h.go); on(root, '#sr-xi', h.xi); });
+      (root) => { on(root, '#sr-go', h.go); on(root, '#sr-auto', h.auto); on(root, '#sr-xi', h.xi); });
   }
 
   /** 先発の入れ替え。まず外す選手、次に入れる選手 */
@@ -192,8 +192,8 @@ const SS = (() => {
     CS.show('<div class="opening"><p class="opening__eyebrow">' + state.year + '年度 冬</p><h2 class="opening__title">' + esc(state.names.soccerNational) + '</h2>' +
       (o ? '<p class="opening__lead">' + Soccer.NAT_ROUNDS[N.round] + 'の相手は <b>' + esc(o.name) + '</b>。引き分けはPK戦。</p>' : '<p class="opening__lead">' + esc(Soccer.natResultText(N)) + '</p>') + '</div>' +
       N.results.map((rr, i) => '<h4 class="sub">' + Soccer.NAT_ROUNDS[i] + '</h4><ul class="cardlist">' + rr.map((r) => '<li class="cardline"><span class="cardline__t">' + esc(r.a) + ' ' + r.text + ' ' + esc(r.b) + '</span></li>').join('') + '</ul>').join('') +
-      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="sn-go">' + (o ? 'キックオフ' : 'シーズンを終える') + '</button>' + (o ? '<button type="button" class="btn" id="sn-xi">先発を変える</button>' : '') + '</div>',
-      (root) => { on(root, '#sn-go', o ? h.go : h.end); on(root, '#sn-xi', h.xi || (() => {})); });
+      '<div class="actions"><button type="button" class="btn btn--primary btn--wide" id="sn-go">' + (o ? 'キックオフ' : 'シーズンを終える') + '</button>' + (o ? '<button type="button" class="btn" id="sn-auto">この試合をおまかせ</button><button type="button" class="btn" id="sn-xi">先発を変える</button>' : '') + '</div>',
+      (root) => { on(root, '#sn-go', o ? h.go : h.end); on(root, '#sn-auto', h.auto || (() => {})); on(root, '#sn-xi', h.xi || (() => {})); });
     if (N.done && N.champion === state.userUni) UI.curtain('<b>' + esc(state.names.soccerNational) + '</b><span>優勝</span>', () => {});
   }
 
